@@ -32,8 +32,8 @@ module.exports = {
       patterns: [
         { from: 'manifest.json', to: 'manifest.json' },
         { from: 'src/styles', to: '.', globOptions: { ignore: ['**/*.ts'] } },
-        // Icons will be added later
-        // { from: 'icons', to: 'icons' },
+        // InboxSDK pageWorld.js — must be in dist root for MV3 injection
+        { from: '../../node_modules/@inboxsdk/core/pageWorld.js', to: 'pageWorld.js' },
       ],
     }),
   ],

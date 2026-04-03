@@ -2,8 +2,13 @@
 // PitchLink Service Worker (Manifest V3 Background)
 // ============================================================
 
+// --- InboxSDK MV3 Background Helper ---
+// InboxSDK needs this to inject pageWorld.js into Gmail's main world
+import '@inboxsdk/core/background';
+
 /**
  * Handles:
+ * - InboxSDK pageWorld injection (MV3 requirement)
  * - OAuth token management
  * - Message passing between content script and API
  * - Alarm-based tasks (Gmail watch renewal, sequence scheduling)
@@ -99,18 +104,22 @@ async function handleApiRequest(
 
 // --- Alarms (Phase 2: Gmail Watch Renewal) ---
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'gmail-watch-renewal') {
-    console.log('[PitchLink BG] Gmail watch renewal triggered');
-    // TODO (Phase 2): Renew Gmail Pub/Sub watch for all authenticated users
-  }
-});
+if (chrome.alarms) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'gmail-watch-renewal') {
+      console.log('[PitchLink BG] Gmail watch renewal triggered');
+      // TODO (Phase 2): Renew Gmail Pub/Sub watch for all authenticated users
+    }
+  });
+}
 
 // Set up recurring alarm for Gmail watch renewal (every 6 days)
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create('gmail-watch-renewal', {
-    periodInMinutes: 6 * 24 * 60, // 6 days
-  });
+  if (chrome.alarms) {
+    chrome.alarms.create('gmail-watch-renewal', {
+      periodInMinutes: 6 * 24 * 60, // 6 days
+    });
+  }
   console.log('[PitchLink BG] Service worker installed, alarms created');
 });
 
