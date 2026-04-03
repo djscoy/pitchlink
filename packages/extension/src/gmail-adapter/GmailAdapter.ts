@@ -42,20 +42,38 @@ export class GmailAdapter {
       const sender = firstMessage.getSender();
 
       const data: ThreadViewData = {
-        threadId: threadView.getThreadIDAsync
-          ? 'pending' // Will resolve async
-          : 'unknown',
-        messageId: firstMessage.getMessageID?.() || '',
+        threadId: 'pending',
+        messageId: '',
         senderEmail: sender?.emailAddress || '',
         senderName: sender?.name || '',
         subject: threadView.getSubject?.() || '',
         messageCount: messageViews.length,
       };
 
-      // Try to get thread ID async
+      // Resolve thread ID and message ID async (InboxSDK deprecated sync versions)
+      const promises: Promise<void>[] = [];
+
       if (threadView.getThreadIDAsync) {
-        threadView.getThreadIDAsync().then((id: string) => {
-          data.threadId = id;
+        promises.push(
+          threadView.getThreadIDAsync().then((id: string) => {
+            data.threadId = id;
+          }),
+        );
+      }
+
+      if (firstMessage.getMessageIDAsync) {
+        promises.push(
+          firstMessage.getMessageIDAsync().then((id: string) => {
+            data.messageId = id;
+          }).catch(() => {
+            // Message not loaded yet — messageId will remain empty
+            console.warn('[GmailAdapter] Could not get message ID (message not loaded yet)');
+          }),
+        );
+      }
+
+      if (promises.length > 0) {
+        Promise.all(promises).then(() => {
           this.currentThreadData = data;
           this.notifyListeners(data);
         });
