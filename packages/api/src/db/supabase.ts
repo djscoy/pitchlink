@@ -1,22 +1,16 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.warn(
-    '[PitchLink] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Database operations will fail.',
-  );
-}
-
 /**
  * Lazy-initialized Supabase admin client.
- * Server starts even without env vars — DB calls will fail with a clear error.
+ * Reads env vars at first use (after dotenv has loaded), not at import time.
  */
 let _adminClient: SupabaseClient | null = null;
 
 export function getSupabaseAdmin(): SupabaseClient {
   if (!_adminClient) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
     }
@@ -47,6 +41,7 @@ export const supabaseAdmin = new Proxy({} as SupabaseClient, {
  * This client respects RLS policies.
  */
 export function createUserClient(accessToken: string) {
+  const supabaseUrl = process.env.SUPABASE_URL;
   if (!supabaseUrl) {
     throw new Error('Supabase is not configured. Set SUPABASE_URL.');
   }

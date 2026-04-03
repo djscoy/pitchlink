@@ -1,4 +1,8 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load .env from monorepo root (handles npm workspace cwd differences)
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -26,11 +30,15 @@ app.use(express.json());
 // CORS — allow Chrome extension origin
 app.use(
   cors({
-    origin: [
-      'chrome-extension://*', // Dev: any extension
-      process.env.EXTENSION_ID ? `chrome-extension://${process.env.EXTENSION_ID}` : '',
-      'http://localhost:3000', // Dev fallback
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      // Allow requests with no origin (service workers, curl, etc.)
+      if (!origin) return callback(null, true);
+      // Allow any chrome-extension origin in development
+      if (origin.startsWith('chrome-extension://')) return callback(null, true);
+      // Allow localhost dev
+      if (origin.startsWith('http://localhost:')) return callback(null, true);
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   }),
 );
