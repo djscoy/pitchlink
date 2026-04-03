@@ -14,8 +14,11 @@ export const iieClient = {
    * Runs server-side Layers 0-3. If the result has detection_layer === 'unresolved'
    * with is_forwarded === true, the caller should show the Layer 4 ForwardPrompt UI.
    */
-  async analyzeMessage(gmailMessageId: string): Promise<IIEResult> {
-    const result = await api.iie.analyze({ gmail_message_id: gmailMessageId }) as ApiResult<IIEResult>;
+  async analyzeMessage(gmailMessageId: string, threadId?: string): Promise<IIEResult> {
+    const result = await api.iie.analyze({
+      gmail_message_id: gmailMessageId || undefined,
+      thread_id: threadId,
+    } as { gmail_message_id: string }) as ApiResult<IIEResult>;
     if ('error' in result && result.error) {
       console.error('[IIE Client] Analysis failed:', result.error);
       return {

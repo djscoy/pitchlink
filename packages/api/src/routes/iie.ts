@@ -31,11 +31,11 @@ iieRouter.use(requireAuth);
 iieRouter.post('/analyze', async (req, res: Response) => {
   try {
     const { userId, workspaceId } = getAuth(req);
-    const { gmail_message_id } = req.body;
+    const { gmail_message_id, thread_id } = req.body;
 
-    if (!gmail_message_id) {
+    if (!gmail_message_id && !thread_id) {
       return res.status(400).json({
-        error: { code: 'MISSING_FIELDS', message: 'gmail_message_id is required' },
+        error: { code: 'MISSING_FIELDS', message: 'gmail_message_id or thread_id is required' },
       });
     }
 
@@ -52,10 +52,35 @@ iieRouter.post('/analyze', async (req, res: Response) => {
       });
     }
 
+    const accessToken = watchState.access_token_encrypted;
+
+    // If no message ID, resolve from thread ID (get first message)
+    let messageId = gmail_message_id;
+    if (!messageId && thread_id) {
+      try {
+        const threadUrl = `https://www.googleapis.com/gmail/v1/users/me/threads/${thread_id}?format=metadata&metadataHeaders=From`;
+        const threadRes = await fetch(threadUrl, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (threadRes.ok) {
+          const threadData = await threadRes.json();
+          messageId = threadData.messages?.[0]?.id;
+        }
+      } catch {
+        console.warn('[IIE] Failed to resolve message ID from thread');
+      }
+    }
+
+    if (!messageId) {
+      return res.status(400).json({
+        error: { code: 'NO_MESSAGE_ID', message: 'Could not resolve a message ID' },
+      });
+    }
+
     const { iieResult } = await forwardDetectionService.detectForward(
       workspaceId,
-      watchState.access_token_encrypted,
-      gmail_message_id,
+      accessToken,
+      messageId,
     );
 
     res.json({ data: iieResult });

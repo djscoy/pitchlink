@@ -73,7 +73,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
 
     (async () => {
       try {
-        const result = await iieClient.analyzeMessage(thread.messageId);
+        const result = await iieClient.analyzeMessage(thread.messageId, thread.threadId);
         if (cancelled) return;
 
         setIieResult(result);

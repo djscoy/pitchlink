@@ -53,6 +53,10 @@ const OUTLOOK_FORWARD_RE =
 const YAHOO_FORWARD_RE =
   /--- Forwarded Message ---[\s\S]*?From:\s*(.+?)(?:\n|$)/i;
 
+// "-------- Original Message --------" (common in many clients)
+const ORIGINAL_MSG_RE =
+  /-{3,}\s*Original Message\s*-{3,}[\s\S]*?(?:From|Subject|Date):\s*.*[\s\S]*?From:\s*(.+?)(?:\n|$)/i;
+
 // Generic "Fwd:" / "Fw:" in a From-like line within the body
 const GENERIC_FWD_FROM_RE =
   /(?:^|\n)\s*(?:>{1,2}\s*)?From:\s*(.+?)(?:\n|$)/i;
@@ -280,6 +284,22 @@ export const forwardDetectionService = {
     if (yahooMatch) {
       const email = extractEmail(yahooMatch[1]);
       const name = extractName(yahooMatch[1]);
+      if (email) {
+        return {
+          is_forwarded: true,
+          original_sender_email: email,
+          original_sender_name: name || undefined,
+          confidence: 0.85,
+          detection_layer: 'body_regex',
+        };
+      }
+    }
+
+    // "-------- Original Message --------" pattern
+    const originalMsgMatch = bodyText.match(ORIGINAL_MSG_RE);
+    if (originalMsgMatch) {
+      const email = extractEmail(originalMsgMatch[1]);
+      const name = extractName(originalMsgMatch[1]);
       if (email) {
         return {
           is_forwarded: true,

@@ -66,8 +66,23 @@ export class GmailAdapter {
           firstMessage.getMessageIDAsync().then((id: string) => {
             data.messageId = id;
           }).catch(() => {
-            // Message not loaded yet — messageId will remain empty
-            console.warn('[GmailAdapter] Could not get message ID (message not loaded yet)');
+            // Message not loaded yet — retry after a delay
+            console.warn('[GmailAdapter] Message not loaded yet, retrying in 1.5s...');
+            return new Promise<void>((resolve) => {
+              setTimeout(() => {
+                if (firstMessage.getMessageIDAsync) {
+                  firstMessage.getMessageIDAsync().then((id: string) => {
+                    data.messageId = id;
+                    resolve();
+                  }).catch(() => {
+                    console.warn('[GmailAdapter] Message ID retry failed, will proceed without it');
+                    resolve();
+                  });
+                } else {
+                  resolve();
+                }
+              }, 1500);
+            });
           }),
         );
       }
