@@ -1,11 +1,16 @@
 import { supabaseAdmin } from '../db/supabase';
 import { gmailWatchService } from './gmail-watch';
 import { dealsService } from './deals';
+import { forwardDetectionService } from './forward-detection';
+import { sourceRegistryService } from './source-registry';
+import { extractEmail } from '../utils/email';
+import type { IIEResult } from '@pitchlink/shared';
 
 /**
  * Reply Detection Service
  *
  * Processes Gmail Pub/Sub notifications to detect replies from tracked contacts.
+ * Integrates with IIE (forward detection) — checks for forwards before reply detection.
  * When a reply is detected, optionally auto-advances the deal's pipeline stage.
  */
 export const replyDetectionService = {
@@ -44,9 +49,9 @@ export const replyDetectionService = {
 
     if (messages.length === 0) return;
 
-    // 5. Check each new message for replies from tracked contacts
+    // 5. Check each new message for forwards and replies
     for (const message of messages) {
-      await this.checkForReply(user.id, user.workspace_id, accessToken, message.id);
+      await this.checkMessage(user.id, user.workspace_id, accessToken, message.id);
     }
   },
 
@@ -67,7 +72,6 @@ export const replyDetectionService = {
 
       if (!response.ok) {
         if (response.status === 404) {
-          // History ID is too old, need to do a full sync
           console.warn('[ReplyDetection] History ID expired, skipping batch');
           return [];
         }
@@ -96,87 +100,178 @@ export const replyDetectionService = {
   },
 
   /**
-   * Check if a Gmail message is a reply from a tracked contact.
+   * Check a Gmail message for forwards (IIE) and replies.
+   * Forward detection runs first. If it's a forward, attribute to original sender.
+   * If not, proceed with standard reply detection.
    */
-  async checkForReply(
+  async checkMessage(
     _userId: string,
     workspaceId: string,
     accessToken: string,
     messageId: string,
   ): Promise<void> {
     try {
-      // Fetch message metadata (headers only, not full body)
-      const url = `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject`;
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      // Run forward detection first — this also fetches the full message
+      const { iieResult, message } = await forwardDetectionService.detectForward(
+        workspaceId,
+        accessToken,
+        messageId,
+      );
 
-      if (!response.ok) return;
+      if (!message) return;
 
-      const message = await response.json();
       const headers = message.payload?.headers || [];
-
-      // Extract sender email
-      const fromHeader = headers.find((h: { name: string }) => h.name === 'From')?.value || '';
+      const fromHeader = headers.find(
+        (h: { name: string }) => h.name.toLowerCase() === 'from',
+      )?.value || '';
       const senderEmail = extractEmail(fromHeader);
-
       if (!senderEmail) return;
 
-      // Check if sender is a tracked contact in this workspace
-      const { data: contact } = await supabaseAdmin
-        .from('contacts')
-        .select('id')
-        .eq('workspace_id', workspaceId)
-        .eq('email', senderEmail.toLowerCase())
-        .maybeSingle();
-
-      if (!contact) return; // Not a tracked contact
-
-      // Find active deals for this contact
-      const { data: deals } = await supabaseAdmin
-        .from('deals')
-        .select(`
-          id,
-          current_stage,
-          campaign_id,
-          campaign:campaigns(pipeline_preset_id, pipeline_preset:pipeline_presets(stages_json))
-        `)
-        .eq('workspace_id', workspaceId)
-        .eq('contact_id', contact.id);
-
-      if (!deals || deals.length === 0) return;
-
-      // Log reply activity and auto-advance if configured
-      for (const deal of deals) {
-        // Log the reply
-        await dealsService.logActivity(deal.id, 'email_received', {
-          gmail_message_id: messageId,
-          from: senderEmail,
-          detected_at: new Date().toISOString(),
-        });
-
-        // Check if auto-advance is configured for the current stage
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const preset = (deal as any).campaign?.pipeline_preset;
-        if (!preset?.stages_json) continue;
-
-        const stages = preset.stages_json as { id: string; auto_advance_on_reply?: boolean }[];
-        const currentStageIdx = stages.findIndex((s) => s.id === deal.current_stage);
-        const currentStage = stages[currentStageIdx];
-        const nextStage = stages[currentStageIdx + 1];
-
-        if (currentStage?.auto_advance_on_reply && nextStage) {
-          await dealsService.changeStage(workspaceId, deal.id, nextStage.id);
-          console.log(
-            `[ReplyDetection] Auto-advanced deal ${deal.id} from ${deal.current_stage} to ${nextStage.id}`,
-          );
-        }
+      // If forward detected with original sender, handle as forward
+      if (iieResult.is_forwarded && iieResult.original_sender_email) {
+        await this.handleForwardedMessage(
+          workspaceId,
+          messageId,
+          senderEmail,
+          iieResult,
+        );
+        return;
       }
 
-      console.log(`[ReplyDetection] Reply detected from ${senderEmail} for contact ${contact.id}`);
+      // Not a forward — proceed with standard reply detection
+      await this.checkForReply(workspaceId, senderEmail, messageId);
     } catch (err) {
       console.error(`[ReplyDetection] Error checking message ${messageId}:`, err);
     }
+  },
+
+  /**
+   * Handle a forwarded message — attribute to original sender.
+   */
+  async handleForwardedMessage(
+    workspaceId: string,
+    messageId: string,
+    forwardingEmail: string,
+    iieResult: IIEResult,
+  ): Promise<void> {
+    const originalEmail = iieResult.original_sender_email!;
+
+    // Auto-create source registry entry if this wasn't already a registry hit
+    if (iieResult.detection_layer !== 'registry') {
+      try {
+        await sourceRegistryService.create(workspaceId, {
+          forwarding_email: forwardingEmail,
+          original_sender_email: originalEmail,
+          original_sender_name: iieResult.original_sender_name,
+          detection_method: iieResult.detection_layer,
+          confidence: iieResult.confidence,
+        });
+        console.log(
+          `[IIE] Auto-created source registry: ${forwardingEmail} → ${originalEmail} (${iieResult.detection_layer})`,
+        );
+      } catch {
+        // Upsert may conflict if entry already exists — that's fine
+      }
+    }
+
+    // Look up or find the original sender as a contact
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('email', originalEmail.toLowerCase())
+      .maybeSingle();
+
+    if (!contact) {
+      console.log(`[IIE] Original sender ${originalEmail} not a tracked contact`);
+      return;
+    }
+
+    // Find active deals and log forward_detected activity
+    const { data: deals } = await supabaseAdmin
+      .from('deals')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('contact_id', contact.id);
+
+    if (!deals || deals.length === 0) return;
+
+    for (const deal of deals) {
+      await dealsService.logActivity(deal.id, 'forward_detected', {
+        gmail_message_id: messageId,
+        forwarding_email: forwardingEmail,
+        original_sender: originalEmail,
+        detection_layer: iieResult.detection_layer,
+        confidence: iieResult.confidence,
+        detected_at: new Date().toISOString(),
+      });
+    }
+
+    console.log(
+      `[IIE] Forward detected: ${forwardingEmail} → ${originalEmail} for contact ${contact.id}`,
+    );
+  },
+
+  /**
+   * Check if a message is a reply from a tracked contact.
+   * Uses already-extracted sender email (no re-fetch needed).
+   */
+  async checkForReply(
+    workspaceId: string,
+    senderEmail: string,
+    messageId: string,
+  ): Promise<void> {
+    // Check if sender is a tracked contact in this workspace
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('email', senderEmail.toLowerCase())
+      .maybeSingle();
+
+    if (!contact) return;
+
+    // Find active deals for this contact
+    const { data: deals } = await supabaseAdmin
+      .from('deals')
+      .select(`
+        id,
+        current_stage,
+        campaign_id,
+        campaign:campaigns(pipeline_preset_id, pipeline_preset:pipeline_presets(stages_json))
+      `)
+      .eq('workspace_id', workspaceId)
+      .eq('contact_id', contact.id);
+
+    if (!deals || deals.length === 0) return;
+
+    // Log reply activity and auto-advance if configured
+    for (const deal of deals) {
+      await dealsService.logActivity(deal.id, 'email_received', {
+        gmail_message_id: messageId,
+        from: senderEmail,
+        detected_at: new Date().toISOString(),
+      });
+
+      // Check if auto-advance is configured for the current stage
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const preset = (deal as any).campaign?.pipeline_preset;
+      if (!preset?.stages_json) continue;
+
+      const stages = preset.stages_json as { id: string; auto_advance_on_reply?: boolean }[];
+      const currentStageIdx = stages.findIndex((s) => s.id === deal.current_stage);
+      const currentStage = stages[currentStageIdx];
+      const nextStage = stages[currentStageIdx + 1];
+
+      if (currentStage?.auto_advance_on_reply && nextStage) {
+        await dealsService.changeStage(workspaceId, deal.id, nextStage.id);
+        console.log(
+          `[ReplyDetection] Auto-advanced deal ${deal.id} from ${deal.current_stage} to ${nextStage.id}`,
+        );
+      }
+    }
+
+    console.log(`[ReplyDetection] Reply detected from ${senderEmail} for contact ${contact.id}`);
   },
 
   /**
@@ -202,20 +297,7 @@ export const replyDetectionService = {
 
     if (error) throw error;
 
-    // Filter to workspace-scoped deals
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (data || []).filter((a: any) => {
-      // deal_activities doesn't have workspace_id directly,
-      // but the joined deal does
-      return a.deal !== null;
-    });
+    return (data || []).filter((a: any) => a.deal !== null);
   },
 };
-
-// --- Helpers ---
-
-function extractEmail(fromHeader: string): string | null {
-  // Parse "Name <email@example.com>" or "email@example.com"
-  const match = fromHeader.match(/<([^>]+)>/) || fromHeader.match(/([^\s<]+@[^\s>]+)/);
-  return match ? match[1].toLowerCase() : null;
-}

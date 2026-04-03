@@ -3,7 +3,13 @@
  * Routes all requests through the service worker for auth token injection.
  */
 
-import type { ApiResult } from '@pitchlink/shared';
+import type {
+  ApiResult,
+  IIEResult,
+  IIEAnalyzeRequest,
+  IIEConfirmRequest,
+  SourceRegistryEntry,
+} from '@pitchlink/shared';
 
 export async function apiRequest<T>(
   method: string,
@@ -114,5 +120,32 @@ export const api = {
     delete: (id: string) => apiRequest<void>('DELETE', `/templates/${id}`),
     resolve: (id: string, context: Record<string, string>) =>
       apiRequest<ApiResult<unknown>>('POST', `/templates/${id}/resolve`, context),
+  },
+
+  // IIE (Inbox Identity Engine)
+  iie: {
+    analyze: (data: IIEAnalyzeRequest) =>
+      apiRequest<ApiResult<IIEResult>>('POST', '/iie/analyze', data),
+    confirm: (data: IIEConfirmRequest) =>
+      apiRequest<ApiResult<unknown>>('POST', '/iie/confirm', data),
+    sourceRegistry: {
+      list: () =>
+        apiRequest<ApiResult<SourceRegistryEntry[]>>('GET', '/iie/source-registry'),
+      create: (data: {
+        forwarding_email: string;
+        original_sender_email?: string;
+        original_sender_name?: string;
+        maps_to_client?: string;
+        maps_to_campaign?: string;
+      }) => apiRequest<ApiResult<SourceRegistryEntry>>('POST', '/iie/source-registry', data),
+      update: (id: string, data: {
+        original_sender_email?: string;
+        original_sender_name?: string;
+        maps_to_client?: string;
+        maps_to_campaign?: string;
+      }) => apiRequest<ApiResult<SourceRegistryEntry>>('PATCH', `/iie/source-registry/${id}`, data),
+      delete: (id: string) =>
+        apiRequest<void>('DELETE', `/iie/source-registry/${id}`),
+    },
   },
 };

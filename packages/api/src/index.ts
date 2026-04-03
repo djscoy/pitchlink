@@ -11,6 +11,7 @@ import { dealsRouter } from './routes/deals';
 import { pipelinePresetsRouter } from './routes/pipeline-presets';
 import { templatesRouter } from './routes/templates';
 import { authRouter } from './routes/auth';
+import { iieRouter } from './routes/iie';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -35,9 +36,10 @@ app.use(
 );
 
 // Rate limiting
-const { generalLimiter, webhookLimiter } = createRateLimiters();
+const { generalLimiter, aiLimiter, webhookLimiter } = createRateLimiters();
 app.use('/api', generalLimiter);
 app.use('/api/gmail/webhook', webhookLimiter);
+app.use('/api/iie/analyze', aiLimiter);
 
 // ============================================================
 // Routes
@@ -51,6 +53,7 @@ app.use('/api/deals', dealsRouter);
 app.use('/api/pipeline-presets', pipelinePresetsRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/iie', iieRouter);
 
 // ============================================================
 // Error handler

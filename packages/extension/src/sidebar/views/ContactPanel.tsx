@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Contact, PipelinePreset, PipelineStage, TransactionMode } from '@pitchlink/shared';
+import type { Contact, PipelinePreset, PipelineStage, TransactionMode, IIEResult } from '@pitchlink/shared';
 import { MODE_CONFIG } from '@pitchlink/shared';
 import { GmailAdapter, ThreadViewData } from '../../gmail-adapter/GmailAdapter';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
 import { StageSelector } from '../components/StageSelector';
+import { ForwardPrompt } from '../../iie/ForwardPrompt';
+import { iieClient } from '../../iie/index';
 
 interface ContactPanelProps {
   thread: ThreadViewData;
@@ -29,13 +31,23 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const [editName, setEditName] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
-  const domain = GmailAdapter.extractDomain(thread.senderEmail);
+  // IIE state
+  const [iieResult, setIieResult] = useState<IIEResult | null>(null);
+  const [showForwardPrompt, setShowForwardPrompt] = useState(false);
+  const [resolvedOriginalEmail, setResolvedOriginalEmail] = useState<string | null>(null);
+
+  const domain = GmailAdapter.extractDomain(
+    resolvedOriginalEmail || thread.senderEmail,
+  );
   const modeConfig = MODE_CONFIG[mode];
+
+  // Determine which email to display/lookup — original sender if forward resolved
+  const displayEmail = resolvedOriginalEmail || thread.senderEmail;
 
   const loadContact = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await api.contacts.lookup(thread.senderEmail) as { data: Contact | null };
+      const result = await api.contacts.lookup(displayEmail) as { data: Contact | null };
       setContact(result.data);
 
       if (result.data) {
@@ -47,11 +59,68 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
     } finally {
       setLoading(false);
     }
-  }, [thread.senderEmail]);
+  }, [displayEmail]);
 
   useEffect(() => {
     loadContact();
   }, [loadContact]);
+
+  // Run IIE analysis when thread opens
+  useEffect(() => {
+    if (!thread.messageId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const result = await iieClient.analyzeMessage(thread.messageId);
+        if (cancelled) return;
+
+        setIieResult(result);
+
+        if (iieClient.isResolved(result)) {
+          // Forward resolved — load original sender's contact
+          setResolvedOriginalEmail(result.original_sender_email!);
+        } else if (iieClient.shouldShowPrompt(result)) {
+          setShowForwardPrompt(true);
+        }
+      } catch (err) {
+        console.error('[ContactPanel] IIE analysis failed:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [thread.messageId]);
+
+  const handleForwardConfirm = async (email: string, name?: string) => {
+    try {
+      await iieClient.confirmAttribution({
+        forwarding_email: thread.senderEmail,
+        original_sender_email: email,
+        original_sender_name: name,
+        is_forward: true,
+      });
+      setShowForwardPrompt(false);
+      setResolvedOriginalEmail(email);
+    } catch (err) {
+      console.error('[ContactPanel] Forward confirm failed:', err);
+    }
+  };
+
+  const handleNotForward = async () => {
+    try {
+      await iieClient.confirmAttribution({
+        forwarding_email: thread.senderEmail,
+        original_sender_email: '',
+        is_forward: false,
+      });
+      setShowForwardPrompt(false);
+    } catch (err) {
+      console.error('[ContactPanel] Not-forward confirm failed:', err);
+    }
+  };
 
   const handleAddContact = async () => {
     try {
@@ -95,10 +164,36 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
 
   if (loading) return <ContactCardSkeleton />;
 
+  // --- Forward Prompt (Layer 4) ---
+  const forwardBanner = showForwardPrompt ? (
+    <ForwardPrompt
+      senderEmail={thread.senderEmail}
+      bestGuess={iieResult?.original_sender_email}
+      bestGuessName={iieResult?.original_sender_name}
+      onConfirm={handleForwardConfirm}
+      onNotForward={handleNotForward}
+    />
+  ) : resolvedOriginalEmail ? (
+    <div
+      style={{
+        padding: '8px 12px',
+        borderRadius: '6px',
+        backgroundColor: 'var(--pl-bg-secondary)',
+        border: '1px solid var(--pl-border-secondary)',
+        fontSize: '11px',
+        color: 'var(--pl-text-secondary)',
+        marginBottom: '8px',
+      }}
+    >
+      Forwarded from <strong>{thread.senderEmail}</strong>
+    </div>
+  ) : null;
+
   // --- New Contact Card ---
   if (!contact) {
     return (
       <div>
+        {forwardBanner}
         <div
           style={{
             padding: '16px 12px',
@@ -140,6 +235,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   // --- Existing Contact Card ---
   return (
     <div>
+      {forwardBanner}
       <div className="pl-card">
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

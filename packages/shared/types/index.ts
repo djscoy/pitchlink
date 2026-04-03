@@ -157,7 +157,8 @@ export type DealActivityType =
   | 'sequence_paused'
   | 'sequence_completed'
   | 'tag_added'
-  | 'tag_removed';
+  | 'tag_removed'
+  | 'forward_detected';
 
 // --- Templates ---
 
@@ -216,9 +217,39 @@ export interface SourceRegistryEntry {
   id: string;
   workspace_id: string;
   forwarding_email: string;
+  original_sender_email?: string;
+  original_sender_name?: string;
   maps_to_client?: string;
   maps_to_campaign?: string;
+  detection_method: IIEDetectionLayer;
+  confidence: number;
   created_at: string;
+  updated_at: string;
+}
+
+// --- Inbox Identity Engine (IIE) ---
+
+export type IIEDetectionLayer = 'registry' | 'header' | 'body_regex' | 'ai' | 'human' | 'unresolved';
+
+export interface IIEResult {
+  is_forwarded: boolean;
+  original_sender_email?: string;
+  original_sender_name?: string;
+  confidence: number;
+  detection_layer: IIEDetectionLayer;
+  forwarding_email?: string;
+}
+
+export interface IIEAnalyzeRequest {
+  gmail_message_id: string;
+  thread_id?: string;
+}
+
+export interface IIEConfirmRequest {
+  forwarding_email: string;
+  original_sender_email: string;
+  original_sender_name?: string;
+  is_forward: boolean;
 }
 
 // --- Email Tracking ---

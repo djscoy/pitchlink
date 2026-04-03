@@ -8,7 +8,7 @@
  */
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { Contact, Campaign, Deal, PipelinePreset, Template } from '@pitchlink/shared';
+import type { Contact, Campaign, Deal, PipelinePreset, Template, SourceRegistryEntry } from '@pitchlink/shared';
 
 // ============================================================
 // Database Schema
@@ -49,6 +49,14 @@ interface PitchLinkDB extends DBSchema {
       'by-workspace': string;
     };
   };
+  source_registry: {
+    key: string;
+    value: SourceRegistryEntry & { _cachedAt: number };
+    indexes: {
+      'by-forwarding-email': string;
+      'by-workspace': string;
+    };
+  };
   meta: {
     key: string;
     value: { key: string; value: unknown; updatedAt: number };
@@ -56,7 +64,7 @@ interface PitchLinkDB extends DBSchema {
 }
 
 const DB_NAME = 'pitchlink-cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // ============================================================
 // Database Initialization
@@ -67,30 +75,34 @@ let dbPromise: Promise<IDBPDatabase<PitchLinkDB>> | null = null;
 function getDB(): Promise<IDBPDatabase<PitchLinkDB>> {
   if (!dbPromise) {
     dbPromise = openDB<PitchLinkDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        // Contacts
-        const contactStore = db.createObjectStore('contacts', { keyPath: 'id' });
-        contactStore.createIndex('by-email', 'email');
-        contactStore.createIndex('by-workspace', 'workspace_id');
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          // Fresh install — create all stores
+          const contactStore = db.createObjectStore('contacts', { keyPath: 'id' });
+          contactStore.createIndex('by-email', 'email');
+          contactStore.createIndex('by-workspace', 'workspace_id');
 
-        // Campaigns
-        const campaignStore = db.createObjectStore('campaigns', { keyPath: 'id' });
-        campaignStore.createIndex('by-workspace', 'workspace_id');
+          const campaignStore = db.createObjectStore('campaigns', { keyPath: 'id' });
+          campaignStore.createIndex('by-workspace', 'workspace_id');
 
-        // Deals
-        const dealStore = db.createObjectStore('deals', { keyPath: 'id' });
-        dealStore.createIndex('by-campaign', 'campaign_id');
-        dealStore.createIndex('by-contact', 'contact_id');
+          const dealStore = db.createObjectStore('deals', { keyPath: 'id' });
+          dealStore.createIndex('by-campaign', 'campaign_id');
+          dealStore.createIndex('by-contact', 'contact_id');
 
-        // Pipeline Presets
-        db.createObjectStore('pipeline_presets', { keyPath: 'id' });
+          db.createObjectStore('pipeline_presets', { keyPath: 'id' });
 
-        // Templates
-        const templateStore = db.createObjectStore('templates', { keyPath: 'id' });
-        templateStore.createIndex('by-workspace', 'workspace_id');
+          const templateStore = db.createObjectStore('templates', { keyPath: 'id' });
+          templateStore.createIndex('by-workspace', 'workspace_id');
 
-        // Meta (sync state, preferences, etc.)
-        db.createObjectStore('meta', { keyPath: 'key' });
+          db.createObjectStore('meta', { keyPath: 'key' });
+        }
+
+        if (oldVersion < 2) {
+          // v2: Add source_registry store for IIE
+          const srStore = db.createObjectStore('source_registry', { keyPath: 'id' });
+          srStore.createIndex('by-forwarding-email', 'forwarding_email');
+          srStore.createIndex('by-workspace', 'workspace_id');
+        }
       },
     });
   }
@@ -229,6 +241,33 @@ export const cache = {
     await db.put('meta', { key, value, updatedAt: Date.now() });
   },
 
+  // --- Source Registry ---
+
+  async getSourceRegistryByEmail(
+    forwardingEmail: string,
+  ): Promise<SourceRegistryEntry | undefined> {
+    const db = await getDB();
+    const result = await db.getFromIndex(
+      'source_registry',
+      'by-forwarding-email',
+      forwardingEmail.toLowerCase(),
+    );
+    if (result) {
+      const { _cachedAt, ...entry } = result;
+      return entry;
+    }
+    return undefined;
+  },
+
+  async putSourceRegistryEntries(entries: SourceRegistryEntry[]): Promise<void> {
+    const db = await getDB();
+    const tx = db.transaction('source_registry', 'readwrite');
+    await Promise.all([
+      ...entries.map((e) => tx.store.put({ ...e, _cachedAt: Date.now() })),
+      tx.done,
+    ]);
+  },
+
   // --- Utilities ---
 
   async clearAll(): Promise<void> {
@@ -238,6 +277,7 @@ export const cache = {
     await db.clear('deals');
     await db.clear('pipeline_presets');
     await db.clear('templates');
+    await db.clear('source_registry');
     await db.clear('meta');
   },
 };

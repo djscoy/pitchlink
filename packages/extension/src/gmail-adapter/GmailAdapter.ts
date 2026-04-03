@@ -9,6 +9,7 @@ type ThreadViewHandler = (data: ThreadViewData) => void;
 
 export interface ThreadViewData {
   threadId: string;
+  messageId: string;
   senderEmail: string;
   senderName: string;
   subject: string;
@@ -44,6 +45,7 @@ export class GmailAdapter {
         threadId: threadView.getThreadIDAsync
           ? 'pending' // Will resolve async
           : 'unknown',
+        messageId: firstMessage.getMessageID?.() || '',
         senderEmail: sender?.emailAddress || '',
         senderName: sender?.name || '',
         subject: threadView.getSubject?.() || '',
