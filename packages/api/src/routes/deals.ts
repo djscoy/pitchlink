@@ -7,6 +7,21 @@ export const dealsRouter = Router();
 dealsRouter.use(requireAuth);
 
 /**
+ * GET /api/deals/contact/:contactId
+ * List deals for a contact (with campaign + pipeline info)
+ */
+dealsRouter.get('/contact/:contactId', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const deals = await dealsService.listByContact(workspaceId, req.params.contactId);
+    res.json({ data: deals });
+  } catch (err) {
+    console.error('[Deals] List by contact error:', err);
+    res.status(500).json({ error: { code: 'LIST_FAILED', message: 'Failed to list deals for contact' } });
+  }
+});
+
+/**
  * GET /api/deals/campaign/:campaignId
  * List deals for a campaign
  */

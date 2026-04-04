@@ -24,6 +24,21 @@ export const dealsService = {
     return data;
   },
 
+  async listByContact(workspaceId: string, contactId: string) {
+    const { data, error } = await supabaseAdmin
+      .from('deals')
+      .select(`
+        *,
+        campaign:campaigns(id, name, mode, status, pipeline_preset:pipeline_presets(*))
+      `)
+      .eq('workspace_id', workspaceId)
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
   async getById(workspaceId: string, dealId: string) {
     const { data, error } = await supabaseAdmin
       .from('deals')

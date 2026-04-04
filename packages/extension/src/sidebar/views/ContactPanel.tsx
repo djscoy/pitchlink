@@ -23,13 +23,24 @@ interface DealInfo {
   };
 }
 
+interface CampaignOption {
+  id: string;
+  name: string;
+  mode: string;
+  pipeline_preset_id: string;
+  pipeline_preset?: PipelinePreset;
+}
+
 export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const [contact, setContact] = useState<Contact | null>(null);
-  const [deals] = useState<DealInfo[]>([]);
+  const [deals, setDeals] = useState<DealInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
+  const [showAddDeal, setShowAddDeal] = useState(false);
+  const [selectedCampaignId, setSelectedCampaignId] = useState('');
 
   // IIE state
   const [iieResult, setIieResult] = useState<IIEResult | null>(null);
@@ -53,6 +64,14 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
       if (result.data) {
         setEditName(result.data.name || '');
         setEditNotes(result.data.notes || '');
+
+        // Load deals for this contact
+        try {
+          const dealsResult = await api.deals.listByContact(result.data.id) as { data: DealInfo[] };
+          setDeals(dealsResult.data || []);
+        } catch (dealErr) {
+          console.error('[ContactPanel] Failed to load deals:', dealErr);
+        }
       }
     } catch (err) {
       console.error('[ContactPanel] Failed to load contact:', err);
@@ -61,9 +80,23 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
     }
   }, [displayEmail]);
 
+  // Load campaigns for the current mode (for "Add to Campaign" dropdown)
+  const loadCampaigns = useCallback(async () => {
+    try {
+      const result = await api.campaigns.list({ mode, status: 'active' }) as { data: { campaigns: CampaignOption[]; total: number } };
+      setCampaigns(result.data?.campaigns || []);
+    } catch (err) {
+      console.error('[ContactPanel] Failed to load campaigns:', err);
+    }
+  }, [mode]);
+
   useEffect(() => {
     loadContact();
   }, [loadContact]);
+
+  useEffect(() => {
+    loadCampaigns();
+  }, [loadCampaigns]);
 
   // Run IIE analysis when thread opens
   useEffect(() => {
@@ -124,9 +157,14 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
 
   const handleAddContact = async () => {
     try {
+      // Use resolved original sender email when IIE detected a forward
+      const contactEmail = displayEmail;
+      const contactName = resolvedOriginalEmail
+        ? (iieResult?.original_sender_name || thread.senderName || '')
+        : (thread.senderName || '');
       const result = await api.contacts.create({
-        email: thread.senderEmail,
-        name: thread.senderName || '',
+        email: contactEmail,
+        name: contactName,
         domain,
       }) as { data: Contact };
 
@@ -155,10 +193,41 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const handleStageChange = async (dealId: string, newStage: string) => {
     try {
       await api.deals.changeStage(dealId, newStage);
-      // Reload contact to refresh deal info
+      // Reload to refresh deal info
       await loadContact();
     } catch (err) {
       console.error('[ContactPanel] Failed to change stage:', err);
+    }
+  };
+
+  const handleAddToCampaign = async () => {
+    if (!contact || !selectedCampaignId) return;
+    const campaign = campaigns.find((c) => c.id === selectedCampaignId);
+    if (!campaign) return;
+
+    // Get the first stage of the pipeline preset as initial stage
+    let initialStage = '';
+    try {
+      const presetResult = await api.presets.get(campaign.pipeline_preset_id) as { data: PipelinePreset };
+      const stages = (presetResult.data?.stages_json || []) as PipelineStage[];
+      initialStage = stages.length > 0 ? stages[0].id : '';
+    } catch {
+      console.error('[ContactPanel] Failed to load preset');
+      return;
+    }
+
+    try {
+      await api.deals.create({
+        contact_id: contact.id,
+        campaign_id: selectedCampaignId,
+        mode,
+        initial_stage: initialStage,
+      });
+      setShowAddDeal(false);
+      setSelectedCampaignId('');
+      await loadContact();
+    } catch (err) {
+      console.error('[ContactPanel] Failed to add to campaign:', err);
     }
   };
 
@@ -349,29 +418,109 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
         </div>
       </div>
 
-      {/* Deals */}
-      {deals.length > 0 && (
-        <div style={{ marginTop: '8px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      {/* Deals / Campaigns */}
+      <div style={{ marginTop: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Campaigns
           </div>
-          {deals.map((deal) => {
-            const stages = (deal.campaign.pipeline_preset?.stages_json || []) as PipelineStage[];
-            return (
-              <div key={deal.id} className="pl-card" style={{ padding: '8px 10px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
-                  {deal.campaign.name}
-                </div>
-                <StageSelector
-                  stages={stages}
-                  currentStageId={deal.current_stage}
-                  onSelect={(stageId) => handleStageChange(deal.id, stageId)}
-                />
-              </div>
-            );
-          })}
+          {campaigns.length > 0 && !showAddDeal && (
+            <button
+              onClick={() => setShowAddDeal(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '11px',
+                color: modeConfig.color,
+                cursor: 'pointer',
+                padding: '0 4px',
+              }}
+            >
+              + Add
+            </button>
+          )}
         </div>
-      )}
+
+        {/* Add to campaign form */}
+        {showAddDeal && (
+          <div className="pl-card" style={{ padding: '8px 10px', marginBottom: '6px' }}>
+            <select
+              value={selectedCampaignId}
+              onChange={(e) => setSelectedCampaignId(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '4px 6px',
+                fontSize: '12px',
+                borderRadius: '4px',
+                border: '1px solid var(--pl-border-secondary)',
+                backgroundColor: 'var(--pl-bg-primary)',
+                color: 'var(--pl-text-primary)',
+                marginBottom: '6px',
+              }}
+            >
+              <option value="">Select campaign...</option>
+              {campaigns
+                .filter((c) => !deals.some((d) => d.campaign.id === c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+            </select>
+            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setShowAddDeal(false); setSelectedCampaignId(''); }}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  border: '1px solid var(--pl-border-secondary)',
+                  borderRadius: '4px',
+                  backgroundColor: 'transparent',
+                  color: 'var(--pl-text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddToCampaign}
+                disabled={!selectedCampaignId}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  backgroundColor: selectedCampaignId ? modeConfig.color : 'var(--pl-bg-tertiary)',
+                  color: selectedCampaignId ? '#FFFFFF' : 'var(--pl-text-tertiary)',
+                  cursor: selectedCampaignId ? 'pointer' : 'default',
+                }}
+              >
+                Assign
+              </button>
+            </div>
+          </div>
+        )}
+
+        {deals.length === 0 && !showAddDeal && (
+          <div style={{ fontSize: '12px', color: 'var(--pl-text-tertiary)', fontStyle: 'italic' }}>
+            Not assigned to any campaign
+          </div>
+        )}
+
+        {deals.map((deal) => {
+          const stages = (deal.campaign.pipeline_preset?.stages_json || []) as PipelineStage[];
+          return (
+            <div key={deal.id} className="pl-card" style={{ padding: '8px 10px', marginBottom: '4px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>
+                {deal.campaign.name}
+              </div>
+              <StageSelector
+                stages={stages}
+                currentStageId={deal.current_stage}
+                onSelect={(stageId) => handleStageChange(deal.id, stageId)}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

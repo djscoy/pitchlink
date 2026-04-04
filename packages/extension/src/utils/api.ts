@@ -83,6 +83,8 @@ export const api = {
   deals: {
     listByCampaign: (campaignId: string) =>
       apiRequest<ApiResult<unknown>>('GET', `/deals/campaign/${campaignId}`),
+    listByContact: (contactId: string) =>
+      apiRequest<ApiResult<unknown>>('GET', `/deals/contact/${contactId}`),
     get: (id: string) => apiRequest<ApiResult<unknown>>('GET', `/deals/${id}`),
     create: (data: {
       contact_id: string;
