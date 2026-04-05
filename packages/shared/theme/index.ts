@@ -29,9 +29,15 @@ export interface ThemeTokens {
 
   // Status
   '--pl-success': string;
+  '--pl-success-bg': string;
+  '--pl-success-text': string;
   '--pl-warning': string;
+  '--pl-warning-bg': string;
+  '--pl-warning-text': string;
   '--pl-error': string;
+  '--pl-error-bg': string;
   '--pl-info': string;
+  '--pl-info-bg': string;
 
   // Mode colors (always the same, adjusted for contrast)
   '--pl-mode-buy': string;
@@ -69,9 +75,15 @@ export const LIGHT_THEME: ThemeTokens = {
   '--pl-surface-raised': '#FFFFFF',
 
   '--pl-success': '#059669',
+  '--pl-success-bg': '#D1FAE5',
+  '--pl-success-text': '#065F46',
   '--pl-warning': '#D97706',
+  '--pl-warning-bg': '#FEF3C7',
+  '--pl-warning-text': '#92400E',
   '--pl-error': '#DC2626',
+  '--pl-error-bg': '#FEE2E2',
   '--pl-info': '#2563EB',
+  '--pl-info-bg': '#DBEAFE',
 
   '--pl-mode-buy': '#2563EB',
   '--pl-mode-sell': '#059669',
@@ -106,9 +118,15 @@ export const DARK_THEME: ThemeTokens = {
   '--pl-surface-raised': '#334155',
 
   '--pl-success': '#34D399',
+  '--pl-success-bg': '#064E3B',
+  '--pl-success-text': '#6EE7B7',
   '--pl-warning': '#FBBF24',
+  '--pl-warning-bg': '#78350F',
+  '--pl-warning-text': '#FDE68A',
   '--pl-error': '#F87171',
+  '--pl-error-bg': '#7F1D1D',
   '--pl-info': '#60A5FA',
+  '--pl-info-bg': '#1E3A5F',
 
   '--pl-mode-buy': '#60A5FA',
   '--pl-mode-sell': '#34D399',

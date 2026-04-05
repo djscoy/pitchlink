@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { TransactionMode, PipelinePreset } from '@pitchlink/shared';
+import type { TransactionMode, PipelinePreset, PipelineStage } from '@pitchlink/shared';
 import { MODE_CONFIG } from '@pitchlink/shared';
+import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { CampaignCardSkeleton } from '../components/Skeleton';
 
@@ -17,6 +18,7 @@ interface CampaignListItem {
   status: string;
   pipeline_preset: PipelinePreset;
   created_at: string;
+  stageStats?: { total_deals: number; stages: (PipelineStage & { count: number })[] };
 }
 
 interface DashboardStats {
@@ -40,7 +42,20 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
       const result = await api.campaigns.list({ mode }) as {
         data: { campaigns: CampaignListItem[]; total: number };
       };
-      setCampaigns(result.data.campaigns);
+      const campaignList = result.data.campaigns;
+
+      // Fetch stage stats for each campaign (non-blocking — show list immediately if stats fail)
+      const statsPromises = campaignList.map(async (c) => {
+        try {
+          const stats = await api.campaigns.getStats(c.id) as {
+            data: { total_deals: number; stages: (PipelineStage & { count: number })[] };
+          };
+          c.stageStats = stats.data;
+        } catch { /* stats are optional polish */ }
+      });
+      await Promise.all(statsPromises);
+
+      setCampaigns(campaignList);
     } catch (err) {
       console.error('[Dashboard] Failed to load campaigns:', err);
     } finally {
@@ -60,6 +75,7 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
   useEffect(() => { loadCampaigns(); loadStats(); }, [loadCampaigns, loadStats]);
 
   const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   if (loading) {
     return (
@@ -93,10 +109,10 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
                 padding: '4px 10px',
                 fontSize: '11px',
                 fontWeight: 600,
-                border: `1px solid ${modeConfig.color}`,
+                border: `1px solid ${modeColors.color}`,
                 borderRadius: '6px',
                 backgroundColor: 'transparent',
-                color: modeConfig.color,
+                color: modeColors.color,
                 cursor: 'pointer',
               }}
             >
@@ -111,8 +127,8 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
               fontWeight: 600,
               border: 'none',
               borderRadius: '6px',
-              backgroundColor: modeConfig.color,
-              color: '#FFFFFF',
+              backgroundColor: modeColors.color,
+              color: 'var(--pl-text-inverse)',
               cursor: 'pointer',
             }}
           >
@@ -130,7 +146,7 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
           marginBottom: '12px',
         }}>
           <MetricCard label="Contacts" value={stats.total_contacts} color="var(--pl-text-primary)" />
-          <MetricCard label="Deals" value={stats.total_deals} color={modeConfig.color} />
+          <MetricCard label="Deals" value={stats.total_deals} color={modeColors.color} />
           <MetricCard label="Replies" value={stats.recent_replies} subtitle="30d" color="var(--pl-success, #10B981)" />
           <MetricCard label="Sequences" value={stats.active_enrollments} color="var(--pl-text-secondary)" />
           <MetricCard label="Enriched" value={stats.enriched_contacts} color="var(--pl-text-secondary)" />
@@ -177,8 +193,8 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
               fontWeight: 600,
               border: 'none',
               borderRadius: '6px',
-              backgroundColor: modeConfig.color,
-              color: '#FFFFFF',
+              backgroundColor: modeColors.color,
+              color: 'var(--pl-text-inverse)',
               cursor: 'pointer',
             }}
           >
@@ -187,34 +203,82 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
         </div>
       )}
 
-      {campaigns.map((campaign) => (
-        <div
-          key={campaign.id}
-          className="pl-card"
-          onClick={() => onNavigateToCampaign(campaign.id)}
-          style={{ cursor: 'pointer' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600 }}>{campaign.name}</div>
-            <span
-              style={{
-                fontSize: '10px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                backgroundColor: campaign.status === 'active' ? 'var(--pl-success)' : 'var(--pl-bg-tertiary)',
-                color: campaign.status === 'active' ? '#FFFFFF' : 'var(--pl-text-tertiary)',
-                fontWeight: 500,
-              }}
-            >
-              {campaign.status}
-            </span>
+      {campaigns.map((campaign) => {
+        const stats = campaign.stageStats;
+        const totalDeals = stats?.total_deals || 0;
+        return (
+          <div
+            key={campaign.id}
+            className="pl-card"
+            onClick={() => onNavigateToCampaign(campaign.id)}
+            style={{ cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600 }}>{campaign.name}</div>
+              <span style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>
+                {totalDeals > 0 ? `${totalDeals} contact${totalDeals !== 1 ? 's' : ''}` : campaign.status}
+              </span>
+            </div>
+
+            {/* Mini progress bar */}
+            {stats && totalDeals > 0 && (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '2px',
+                    marginTop: '8px',
+                    height: '6px',
+                    borderRadius: '3px',
+                    overflow: 'hidden',
+                    backgroundColor: 'var(--pl-bg-tertiary)',
+                  }}
+                >
+                  {stats.stages.map((stage) => (
+                    <div
+                      key={stage.id}
+                      style={{
+                        flex: stage.count / (totalDeals || 1),
+                        backgroundColor: stage.count > 0 ? stage.color : 'transparent',
+                        borderRadius: '2px',
+                        minWidth: stage.count > 0 ? '4px' : 0,
+                        transition: 'flex 0.3s ease',
+                      }}
+                    />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                  {stats.stages
+                    .filter((s) => s.count > 0)
+                    .map((stage) => (
+                      <span
+                        key={stage.id}
+                        style={{
+                          fontSize: '10px',
+                          color: 'var(--pl-text-secondary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                        }}
+                      >
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: stage.color }} />
+                        {stage.name}: {stage.count}
+                      </span>
+                    ))}
+                </div>
+              </>
+            )}
+
+            {/* Fallback info when no deals */}
+            {(!stats || totalDeals === 0) && (
+              <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)', marginTop: '4px' }}>
+                {campaign.pipeline_preset?.name || 'Custom pipeline'} &middot;{' '}
+                {new Date(campaign.created_at).toLocaleDateString()}
+              </div>
+            )}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)', marginTop: '4px' }}>
-            {campaign.pipeline_preset?.name || 'Custom pipeline'} &middot;{' '}
-            {new Date(campaign.created_at).toLocaleDateString()}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -268,11 +332,12 @@ function CreateCampaignForm({
   };
 
   const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   return (
     <div
       className="pl-card"
-      style={{ marginBottom: '12px', borderColor: modeConfig.color }}
+      style={{ marginBottom: '12px', borderColor: modeColors.color }}
     >
       <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>
         New {modeConfig.label} Campaign
@@ -344,8 +409,8 @@ function CreateCampaignForm({
             fontWeight: 600,
             border: 'none',
             borderRadius: '4px',
-            backgroundColor: modeConfig.color,
-            color: '#FFFFFF',
+            backgroundColor: modeColors.color,
+            color: 'var(--pl-text-inverse)',
             cursor: name.trim() && selectedPresetId && !creating ? 'pointer' : 'not-allowed',
             opacity: name.trim() && selectedPresetId && !creating ? 1 : 0.5,
           }}

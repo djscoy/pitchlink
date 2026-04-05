@@ -22,8 +22,8 @@ export function ReplyBadge({ hasReply, replyDate }: ReplyBadgeProps) {
         fontSize: '10px',
         fontWeight: 600,
         borderRadius: '4px',
-        backgroundColor: '#DBEAFE',
-        color: '#1D4ED8',
+        backgroundColor: 'var(--pl-info-bg)',
+        color: 'var(--pl-info)',
       }}
       title={replyDate ? `Replied ${timeAgo}` : 'Replied'}
     >

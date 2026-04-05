@@ -176,8 +176,8 @@ export function SourceRegistryView() {
               fontWeight: 600,
               border: 'none',
               borderRadius: '4px',
-              backgroundColor: 'var(--pl-accent)',
-              color: '#FFFFFF',
+              backgroundColor: 'var(--pl-info)',
+              color: 'var(--pl-text-inverse)',
               cursor: newForwarding.trim() ? 'pointer' : 'not-allowed',
               opacity: newForwarding.trim() ? 1 : 0.5,
             }}
@@ -279,7 +279,7 @@ export function SourceRegistryView() {
                 </button>
                 <button
                   onClick={() => handleDelete(entry.id)}
-                  style={{ ...smallBtnStyle, color: '#DC2626' }}
+                  style={{ ...smallBtnStyle, color: 'var(--pl-error)' }}
                 >
                   Delete
                 </button>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { TransactionMode } from '@pitchlink/shared';
-import { MODE_CONFIG } from '@pitchlink/shared';
+import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 
 interface ComposePanelProps {
@@ -34,7 +34,7 @@ export function ComposePanel({
   const [saved, setSaved] = useState(false);
   const [generated, setGenerated] = useState(false);
 
-  const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -81,7 +81,7 @@ export function ComposePanel({
 
   return (
     <div style={{ marginTop: '8px' }}>
-      <div className="pl-card" style={{ borderColor: modeConfig.color }}>
+      <div className="pl-card" style={{ borderColor: modeColors.color }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <div style={{ fontSize: '12px', fontWeight: 600 }}>
@@ -148,8 +148,8 @@ export function ComposePanel({
             fontWeight: 600,
             border: 'none',
             borderRadius: '6px',
-            backgroundColor: generating ? 'var(--pl-bg-tertiary)' : modeConfig.color,
-            color: generating ? 'var(--pl-text-tertiary)' : '#FFFFFF',
+            backgroundColor: generating ? 'var(--pl-bg-tertiary)' : modeColors.color,
+            color: generating ? 'var(--pl-text-tertiary)' : 'var(--pl-text-inverse)',
             cursor: generating ? 'not-allowed' : 'pointer',
             marginBottom: generated ? '10px' : '0',
           }}
@@ -211,7 +211,7 @@ export function ComposePanel({
                 padding: '8px',
                 borderRadius: '6px',
                 backgroundColor: 'var(--pl-success)',
-                color: '#FFFFFF',
+                color: 'var(--pl-text-inverse)',
                 fontSize: '12px',
                 fontWeight: 500,
                 textAlign: 'center',
@@ -227,10 +227,10 @@ export function ComposePanel({
                   padding: '8px',
                   fontSize: '12px',
                   fontWeight: 600,
-                  border: `1px solid ${modeConfig.color}`,
+                  border: `1px solid ${modeColors.color}`,
                   borderRadius: '6px',
                   backgroundColor: 'transparent',
-                  color: saving ? 'var(--pl-text-tertiary)' : modeConfig.color,
+                  color: saving ? 'var(--pl-text-tertiary)' : modeColors.color,
                   cursor: saving || !subject.trim() || !body.trim() ? 'not-allowed' : 'pointer',
                 }}
               >

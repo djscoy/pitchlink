@@ -24,12 +24,12 @@ interface OnboardingViewProps {
   onSkip: () => void;
 }
 
-const DEAL_STATUS_LABELS: Record<DealStatus, { label: string; color: string }> = {
-  waiting_for_reply: { label: 'Waiting for reply', color: '#F59E0B' },
-  quoted_no_followup: { label: 'Quoted, no follow-up', color: '#EF4444' },
-  active_conversation: { label: 'Active conversation', color: '#10B981' },
-  completed_deal: { label: 'Completed', color: '#6B7280' },
-  unclassified: { label: 'Unclassified', color: '#9CA3AF' },
+const DEAL_STATUS_LABELS: Record<DealStatus, { label: string; colorVar: string }> = {
+  waiting_for_reply: { label: 'Waiting for reply', colorVar: 'var(--pl-warning)' },
+  quoted_no_followup: { label: 'Quoted, no follow-up', colorVar: 'var(--pl-error)' },
+  active_conversation: { label: 'Active conversation', colorVar: 'var(--pl-success)' },
+  completed_deal: { label: 'Completed', colorVar: 'var(--pl-text-secondary)' },
+  unclassified: { label: 'Unclassified', colorVar: 'var(--pl-text-tertiary)' },
 };
 
 const TIME_RANGES = [
@@ -279,10 +279,10 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
                   style={{
                     padding: '5px 10px',
                     fontSize: '12px',
-                    border: timeRange === tr.value ? '1px solid #2563EB' : '1px solid var(--pl-border-secondary)',
+                    border: timeRange === tr.value ? '1px solid var(--pl-info)' : '1px solid var(--pl-border-secondary)',
                     borderRadius: '6px',
-                    backgroundColor: timeRange === tr.value ? '#2563EB' : 'transparent',
-                    color: timeRange === tr.value ? '#FFFFFF' : 'var(--pl-text-primary)',
+                    backgroundColor: timeRange === tr.value ? 'var(--pl-info)' : 'transparent',
+                    color: timeRange === tr.value ? 'var(--pl-text-inverse)' : 'var(--pl-text-primary)',
                     cursor: 'pointer',
                   }}
                 >
@@ -318,7 +318,7 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#EF4444', marginBottom: '8px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--pl-error)', marginBottom: '8px' }}>
               {error}
             </div>
           )}
@@ -332,8 +332,8 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
               fontWeight: 600,
               border: 'none',
               borderRadius: '6px',
-              backgroundColor: '#2563EB',
-              color: '#FFFFFF',
+              backgroundColor: 'var(--pl-info)',
+              color: 'var(--pl-text-inverse)',
               cursor: 'pointer',
               marginBottom: '8px',
             }}
@@ -384,7 +384,7 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
                   width: progress.status === 'scanning'
                     ? `${Math.min(95, (progress.scanned_messages / Math.max(progress.total_messages, progress.scanned_messages + 1)) * 100)}%`
                     : '100%',
-                  backgroundColor: '#2563EB',
+                  backgroundColor: 'var(--pl-info)',
                   borderRadius: '3px',
                   transition: 'width 0.3s ease',
                 }} />
@@ -418,7 +418,7 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#EF4444', marginTop: '12px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--pl-error)', marginTop: '12px' }}>
               {error}
             </div>
           )}
@@ -439,10 +439,10 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
                 style={{
                   padding: '3px 8px',
                   fontSize: '11px',
-                  border: '1px solid #10B981',
+                  border: '1px solid var(--pl-success)',
                   borderRadius: '4px',
                   backgroundColor: 'transparent',
-                  color: pendingInFilter > 0 ? '#10B981' : 'var(--pl-text-tertiary)',
+                  color: pendingInFilter > 0 ? 'var(--pl-success)' : 'var(--pl-text-tertiary)',
                   cursor: pendingInFilter > 0 ? 'pointer' : 'default',
                 }}
               >
@@ -454,10 +454,10 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
                   style={{
                     padding: '3px 8px',
                     fontSize: '11px',
-                    border: '1px solid #EF4444',
+                    border: '1px solid var(--pl-error)',
                     borderRadius: '4px',
                     backgroundColor: 'transparent',
-                    color: '#EF4444',
+                    color: 'var(--pl-error)',
                     cursor: 'pointer',
                   }}
                 >
@@ -477,7 +477,7 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
                 <FilterPill
                   key={ds}
                   label={`${DEAL_STATUS_LABELS[ds].label} (${count})`}
-                  color={DEAL_STATUS_LABELS[ds].color}
+                  color={DEAL_STATUS_LABELS[ds].colorVar}
                   active={filter === ds}
                   onClick={() => setFilter(ds)}
                 />
@@ -509,7 +509,7 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
             </div>
 
             {error && (
-              <div style={{ fontSize: '12px', color: '#EF4444', marginBottom: '8px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--pl-error)', marginBottom: '8px' }}>
                 {error}
               </div>
             )}
@@ -524,8 +524,8 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
                 fontWeight: 600,
                 border: 'none',
                 borderRadius: '6px',
-                backgroundColor: acceptedCount > 0 ? '#2563EB' : 'var(--pl-bg-tertiary)',
-                color: acceptedCount > 0 ? '#FFFFFF' : 'var(--pl-text-tertiary)',
+                backgroundColor: acceptedCount > 0 ? 'var(--pl-info)' : 'var(--pl-bg-tertiary)',
+                color: acceptedCount > 0 ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
                 cursor: acceptedCount > 0 ? 'pointer' : 'default',
                 marginBottom: '6px',
               }}
@@ -597,8 +597,8 @@ export function OnboardingView({ onComplete, onSkip }: OnboardingViewProps) {
               fontWeight: 600,
               border: 'none',
               borderRadius: '6px',
-              backgroundColor: '#2563EB',
-              color: '#FFFFFF',
+              backgroundColor: 'var(--pl-info)',
+              color: 'var(--pl-text-inverse)',
               cursor: 'pointer',
               marginBottom: '8px',
             }}
@@ -674,10 +674,10 @@ function ContactCard({
               title="Accept"
               style={{
                 width: '24px', height: '24px',
-                border: '1px solid #10B981',
+                border: '1px solid var(--pl-success)',
                 borderRadius: '4px',
                 backgroundColor: 'transparent',
-                color: '#10B981',
+                color: 'var(--pl-success)',
                 cursor: 'pointer',
                 fontSize: '13px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -690,10 +690,10 @@ function ContactCard({
               title="Reject"
               style={{
                 width: '24px', height: '24px',
-                border: '1px solid #EF4444',
+                border: '1px solid var(--pl-error)',
                 borderRadius: '4px',
                 backgroundColor: 'transparent',
-                color: '#EF4444',
+                color: 'var(--pl-error)',
                 cursor: 'pointer',
                 fontSize: '13px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -703,7 +703,7 @@ function ContactCard({
             </button>
           </div>
         ) : (
-          <div style={{ fontSize: '10px', color: contact.status === 'accepted' ? '#10B981' : '#6B7280', flexShrink: 0, marginLeft: '8px' }}>
+          <div style={{ fontSize: '10px', color: contact.status === 'accepted' ? 'var(--pl-success)' : 'var(--pl-text-secondary)', flexShrink: 0, marginLeft: '8px' }}>
             {contact.status === 'accepted' ? 'Accepted' : 'Rejected'}
           </div>
         )}
@@ -715,8 +715,8 @@ function ContactCard({
             fontSize: '10px',
             padding: '1px 6px',
             borderRadius: '4px',
-            backgroundColor: statusInfo.color + '20',
-            color: statusInfo.color,
+            backgroundColor: 'var(--pl-bg-tertiary)',
+            color: statusInfo.colorVar,
           }}>
             {statusInfo.label}
           </span>
@@ -725,12 +725,12 @@ function ContactCard({
           {contact.sent_count}&#8593; {contact.received_count}&#8595;
         </span>
         {contact.nudge_gmail_draft_id && (
-          <span style={{ fontSize: '10px', color: '#F59E0B' }}>
+          <span style={{ fontSize: '10px', color: 'var(--pl-warning)' }}>
             Draft saved
           </span>
         )}
         {contact.is_forwarding_address && (
-          <span style={{ fontSize: '10px', color: '#8B5CF6' }}>
+          <span style={{ fontSize: '10px', color: 'var(--pl-mode-exchange)' }}>
             Forwarding
           </span>
         )}
@@ -756,16 +756,17 @@ function FilterPill({
   active: boolean;
   onClick: () => void;
 }) {
+  const pillColor = color || 'var(--pl-info)';
   return (
     <button
       onClick={onClick}
       style={{
         padding: '2px 8px',
         fontSize: '10px',
-        border: active ? '1px solid ' + (color || '#2563EB') : '1px solid var(--pl-border-secondary)',
+        border: active ? `1px solid ${pillColor}` : '1px solid var(--pl-border-secondary)',
         borderRadius: '10px',
-        backgroundColor: active ? (color || '#2563EB') + '20' : 'transparent',
-        color: active ? (color || '#2563EB') : 'var(--pl-text-tertiary)',
+        backgroundColor: active ? 'var(--pl-bg-active)' : 'transparent',
+        color: active ? pillColor : 'var(--pl-text-tertiary)',
         cursor: 'pointer',
       }}
     >

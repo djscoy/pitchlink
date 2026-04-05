@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Template, TransactionMode } from '@pitchlink/shared';
-import { MODE_CONFIG } from '@pitchlink/shared';
+import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
 
@@ -21,7 +21,7 @@ export function TemplatePanel({ mode, onInsert, contactContext }: TemplatePanelP
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   const loadTemplates = useCallback(async () => {
     setLoading(true);
@@ -99,8 +99,8 @@ export function TemplatePanel({ mode, onInsert, contactContext }: TemplatePanelP
             fontWeight: 600,
             border: 'none',
             borderRadius: '6px',
-            backgroundColor: modeConfig.color,
-            color: '#FFFFFF',
+            backgroundColor: modeColors.color,
+            color: 'var(--pl-text-inverse)',
             cursor: 'pointer',
           }}
         >
@@ -279,7 +279,7 @@ function TemplateForm({
   const [bodyHtml, setBodyHtml] = useState(template?.body_html || '');
   const [saving, setSaving] = useState(false);
 
-  const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
   const isEdit = !!template;
 
   const handleSave = async () => {
@@ -300,7 +300,7 @@ function TemplateForm({
   };
 
   return (
-    <div className="pl-card" style={{ borderColor: modeConfig.color, marginBottom: '8px' }}>
+    <div className="pl-card" style={{ borderColor: modeColors.color, marginBottom: '8px' }}>
       <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>
         {isEdit ? 'Edit Template' : 'New Template'}
       </div>
@@ -386,8 +386,8 @@ function TemplateForm({
             fontWeight: 600,
             border: 'none',
             borderRadius: '4px',
-            backgroundColor: modeConfig.color,
-            color: '#FFFFFF',
+            backgroundColor: modeColors.color,
+            color: 'var(--pl-text-inverse)',
             cursor: name.trim() && subject.trim() && !saving ? 'pointer' : 'not-allowed',
             opacity: name.trim() && subject.trim() && !saving ? 1 : 0.5,
           }}

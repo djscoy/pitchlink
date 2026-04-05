@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { PipelineStage, TransactionMode } from '@pitchlink/shared';
 import { MODE_CONFIG } from '@pitchlink/shared';
+import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { CampaignCardSkeleton } from '../components/Skeleton';
 import { StageBadge } from '../components/StageBadge';
@@ -28,7 +29,7 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
   const [activeDealsByStage, setActiveDealsByStage] = useState<Record<string, DealWithContact[]>>({});
   const [loading, setLoading] = useState(true);
 
-  const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
@@ -113,7 +114,7 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
           <CampaignSummaryCard
             key={stats.campaign.id}
             stats={stats}
-            modeColor={modeConfig.color}
+            modeColor={modeColors.color}
             onClick={() => onSelectCampaign(stats.campaign.id)}
           />
         ))}

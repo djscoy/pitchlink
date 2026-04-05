@@ -219,6 +219,40 @@ export const dealsService = {
     };
   },
 
+  async getGlobalActivities(
+    workspaceId: string,
+    params: { mode?: string; limit?: number; offset?: number },
+  ) {
+    const limit = params.limit || 50;
+    const offset = params.offset || 0;
+
+    // Use RPC-style query to avoid Supabase deep type instantiation with nested joins
+    const baseQuery = supabaseAdmin
+      .from('deal_activities')
+      .select(`
+        id, type, data, created_at,
+        deal:deals!inner(
+          id, mode, current_stage,
+          contact:contacts(id, email, name, domain),
+          campaign:campaigns(id, name)
+        )
+      ` as '*', { count: 'exact' }) as any;
+
+    let query = baseQuery
+      .eq('deal.workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (params.mode) {
+      query = query.eq('deal.mode', params.mode);
+    }
+
+    const { data, error, count }: { data: any[]; error: any; count: number | null } = await query;
+
+    if (error) throw error;
+    return { activities: data || [], total: count || 0 };
+  },
+
   async delete(workspaceId: string, dealId: string) {
     const { error } = await supabaseAdmin
       .from('deals')

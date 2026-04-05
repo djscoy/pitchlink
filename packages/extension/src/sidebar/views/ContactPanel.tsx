@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Contact, PipelinePreset, PipelineStage, TransactionMode, IIEResult, Sequence } from '@pitchlink/shared';
-import { MODE_CONFIG } from '@pitchlink/shared';
+
+import { useModeColors } from '../hooks/useModeColors';
 import { GmailAdapter, ThreadViewData } from '../../gmail-adapter/GmailAdapter';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
@@ -66,7 +67,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const domain = GmailAdapter.extractDomain(
     resolvedOriginalEmail || thread.senderEmail,
   );
-  const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   // Determine which email to display/lookup — original sender if forward resolved
   const displayEmail = resolvedOriginalEmail || thread.senderEmail;
@@ -408,8 +409,8 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
               fontWeight: 600,
               border: 'none',
               borderRadius: '6px',
-              backgroundColor: modeConfig.color,
-              color: '#FFFFFF',
+              backgroundColor: modeColors.color,
+              color: 'var(--pl-text-inverse)',
               cursor: 'pointer',
             }}
           >
@@ -445,8 +446,14 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                 }}
               />
             ) : (
-              <div style={{ fontSize: '14px', fontWeight: 600 }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {contact.name || contact.email}
+                {contact.enrichment_status && contact.enrichment_status !== 'none' && (
+                  <span
+                    className={`pl-enrichment-${contact.enrichment_status === 'full' ? 'full' : 'partial'}`}
+                    title={`Enrichment: ${contact.enrichment_status}`}
+                  />
+                )}
               </div>
             )}
             <div style={{ fontSize: '12px', color: 'var(--pl-text-secondary)', marginTop: '2px' }}>
@@ -568,10 +575,10 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
               padding: '3px 10px',
               fontSize: '11px',
               fontWeight: 600,
-              border: `1px solid ${modeConfig.color}`,
+              border: `1px solid ${modeColors.color}`,
               borderRadius: '4px',
-              backgroundColor: showCompose ? modeConfig.color : 'transparent',
-              color: showCompose ? '#FFFFFF' : modeConfig.color,
+              backgroundColor: showCompose ? modeColors.color : 'transparent',
+              color: showCompose ? 'var(--pl-text-inverse)' : modeColors.color,
               cursor: 'pointer',
             }}
           >
@@ -579,28 +586,14 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
           </button>
         </div>
         {enrichError && (
-          <div style={{ fontSize: '11px', color: '#EF4444', marginTop: '4px' }}>{enrichError}</div>
+          <div style={{ fontSize: '11px', color: 'var(--pl-error)', marginTop: '4px' }}>{enrichError}</div>
         )}
       </div>
 
       {/* Enrichment Data */}
       {showEnrichment && enrichmentData && (
         <div className="pl-card" style={{ marginTop: '6px', padding: '10px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-            Enrichment Data
-          </div>
-          {Object.entries(enrichmentData)
-            .filter(([, v]) => v !== null && v !== undefined && v !== '' && typeof v !== 'object')
-            .map(([key, value]) => (
-              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: '11px' }}>
-                <span style={{ color: 'var(--pl-text-tertiary)', textTransform: 'capitalize' }}>
-                  {key.replace(/_/g, ' ')}
-                </span>
-                <span style={{ color: 'var(--pl-text-primary)', maxWidth: '60%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {String(value)}
-                </span>
-              </div>
-            ))}
+          <EnrichmentDataDisplay data={enrichmentData} />
         </div>
       )}
 
@@ -632,7 +625,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                 background: 'none',
                 border: 'none',
                 fontSize: '11px',
-                color: modeConfig.color,
+                color: modeColors.color,
                 cursor: 'pointer',
                 padding: '0 4px',
               }}
@@ -689,8 +682,8 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                   fontSize: '11px',
                   border: 'none',
                   borderRadius: '4px',
-                  backgroundColor: selectedCampaignId ? modeConfig.color : 'var(--pl-bg-tertiary)',
-                  color: selectedCampaignId ? '#FFFFFF' : 'var(--pl-text-tertiary)',
+                  backgroundColor: selectedCampaignId ? modeColors.color : 'var(--pl-bg-tertiary)',
+                  color: selectedCampaignId ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
                   cursor: selectedCampaignId ? 'pointer' : 'default',
                 }}
               >
@@ -737,7 +730,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                   background: 'none',
                   border: 'none',
                   fontSize: '11px',
-                  color: modeConfig.color,
+                  color: modeColors.color,
                   cursor: 'pointer',
                   padding: '0 4px',
                 }}
@@ -811,8 +804,8 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                     fontSize: '11px',
                     border: 'none',
                     borderRadius: '4px',
-                    backgroundColor: selectedSequenceId && enrollingDealId ? modeConfig.color : 'var(--pl-bg-tertiary)',
-                    color: selectedSequenceId && enrollingDealId ? '#FFFFFF' : 'var(--pl-text-tertiary)',
+                    backgroundColor: selectedSequenceId && enrollingDealId ? modeColors.color : 'var(--pl-bg-tertiary)',
+                    color: selectedSequenceId && enrollingDealId ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
                     cursor: selectedSequenceId && enrollingDealId ? 'pointer' : 'default',
                   }}
                 >
@@ -830,7 +823,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                   <div style={{ fontSize: '12px', fontWeight: 500 }}>{enrollment.sequence.name}</div>
                   <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>
                     Step {enrollment.current_step + 1} &middot;{' '}
-                    <span style={{ color: enrollment.status === 'paused' ? 'var(--pl-warning, #F59E0B)' : modeConfig.color }}>
+                    <span style={{ color: enrollment.status === 'paused' ? 'var(--pl-warning, #F59E0B)' : modeColors.color }}>
                       {enrollment.status}
                     </span>
                     {enrollment.pause_reason && ` (${enrollment.pause_reason === 'reply_received' ? 'replied' : enrollment.pause_reason})`}
@@ -846,8 +839,8 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                         fontWeight: 600,
                         border: 'none',
                         borderRadius: '4px',
-                        backgroundColor: modeConfig.color,
-                        color: '#FFFFFF',
+                        backgroundColor: modeColors.color,
+                        color: 'var(--pl-text-inverse)',
                         cursor: 'pointer',
                       }}
                     >
@@ -895,6 +888,91 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Enrichment Data Display ---
+
+const ENRICHMENT_SECTIONS: { label: string; keys: string[] }[] = [
+  { label: 'Contact', keys: ['full_name', 'first_name', 'last_name', 'job_title', 'position', 'company', 'company_name', 'location', 'city', 'country', 'phone'] },
+  { label: 'Company', keys: ['company_size', 'employee_count', 'industry', 'revenue', 'funding', 'tech_stack', 'founded'] },
+  { label: 'Social', keys: ['linkedin', 'linkedin_url', 'twitter', 'twitter_url', 'github', 'github_url', 'facebook', 'website'] },
+  { label: 'SEO', keys: ['domain_rating', 'monthly_traffic', 'spam_score', 'backlinks', 'referring_domains', 'niche'] },
+];
+
+function isUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value) || /^www\./i.test(value);
+}
+
+function EnrichmentDataDisplay({ data }: { data: Record<string, unknown> }) {
+  const flatEntries = Object.entries(data).filter(
+    ([, v]) => v !== null && v !== undefined && v !== '' && typeof v !== 'object'
+  );
+
+  const usedKeys = new Set<string>();
+  const sections: { label: string; entries: [string, unknown][] }[] = [];
+
+  for (const section of ENRICHMENT_SECTIONS) {
+    const entries = flatEntries.filter(([k]) => section.keys.includes(k));
+    if (entries.length > 0) {
+      sections.push({ label: section.label, entries });
+      entries.forEach(([k]) => usedKeys.add(k));
+    }
+  }
+
+  // Remaining keys that don't fit any section
+  const otherEntries = flatEntries.filter(([k]) => !usedKeys.has(k));
+  if (otherEntries.length > 0) {
+    sections.push({ label: 'Other', entries: otherEntries });
+  }
+
+  if (sections.length === 0) {
+    return <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>No enrichment data available.</div>;
+  }
+
+  return (
+    <div>
+      {sections.map((section) => (
+        <div key={section.label} style={{ marginBottom: '8px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--pl-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+            {section.label}
+          </div>
+          {section.entries.map(([key, value]) => {
+            const strValue = String(value);
+            const clickable = isUrl(strValue);
+            return (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: '11px' }}>
+                <span style={{ color: 'var(--pl-text-tertiary)', textTransform: 'capitalize' }}>
+                  {key.replace(/_/g, ' ')}
+                </span>
+                {clickable ? (
+                  <a
+                    href={strValue.startsWith('http') ? strValue : `https://${strValue}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: 'var(--pl-info)',
+                      maxWidth: '60%',
+                      textAlign: 'right',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {strValue.replace(/^https?:\/\/(www\.)?/, '')}
+                  </a>
+                ) : (
+                  <span style={{ color: 'var(--pl-text-primary)', maxWidth: '60%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {strValue}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

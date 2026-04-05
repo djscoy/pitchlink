@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { TransactionMode, Contact, PipelinePreset, PipelineStage } from '@pitchlink/shared';
-import { MODE_CONFIG } from '@pitchlink/shared';
+
+import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
 
@@ -31,7 +32,7 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
   const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
   const [firstStage, setFirstStage] = useState<PipelineStage | null>(null);
 
-  const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   // Load campaigns for current mode
   useEffect(() => {
@@ -235,7 +236,7 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
           padding: '8px 12px',
           borderRadius: '6px',
           backgroundColor: 'var(--pl-success)',
-          color: '#FFFFFF',
+          color: 'var(--pl-text-inverse)',
           fontSize: '12px',
           fontWeight: 500,
           marginBottom: '8px',
@@ -393,8 +394,8 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
               fontWeight: 600,
               border: 'none',
               borderRadius: '8px',
-              backgroundColor: selectedIds.size > 0 && !assigning ? modeConfig.color : 'var(--pl-bg-tertiary)',
-              color: selectedIds.size > 0 && !assigning ? '#FFFFFF' : 'var(--pl-text-tertiary)',
+              backgroundColor: selectedIds.size > 0 && !assigning ? modeColors.color : 'var(--pl-bg-tertiary)',
+              color: selectedIds.size > 0 && !assigning ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
               cursor: selectedIds.size > 0 && !assigning ? 'pointer' : 'not-allowed',
               transition: 'all 0.15s ease',
             }}

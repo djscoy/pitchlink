@@ -120,6 +120,14 @@ export const api = {
       apiRequest<ApiResult<unknown>>('PATCH', `/deals/${id}/stage`, { stage }),
     getActivities: (id: string) =>
       apiRequest<ApiResult<unknown>>('GET', `/deals/${id}/activities`),
+    getGlobalActivities: (params: { mode?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params.mode) qs.set('mode', params.mode);
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.offset) qs.set('offset', String(params.offset));
+      const q = qs.toString();
+      return apiRequest<ApiResult<{ activities: unknown[]; total: number }>>('GET', `/deals/activities${q ? '?' + q : ''}`);
+    },
     delete: (id: string) => apiRequest<void>('DELETE', `/deals/${id}`),
   },
 

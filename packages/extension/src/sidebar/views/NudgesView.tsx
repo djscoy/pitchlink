@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { TransactionMode, Sequence, SequenceStep } from '@pitchlink/shared';
-import { MODE_CONFIG } from '@pitchlink/shared';
+
+import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { Skeleton } from '../components/Skeleton';
 
@@ -30,7 +31,7 @@ export function NudgesView({ mode }: NudgesViewProps) {
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const modeConfig = MODE_CONFIG[mode];
+  const modeColors = useModeColors(mode);
 
   const loadQueue = useCallback(async () => {
     try {
@@ -93,10 +94,10 @@ export function NudgesView({ mode }: NudgesViewProps) {
               padding: '6px',
               fontSize: '11px',
               fontWeight: viewMode === v ? 600 : 400,
-              border: viewMode === v ? `1px solid ${modeConfig.color}` : '1px solid var(--pl-border-secondary)',
+              border: viewMode === v ? `1px solid ${modeColors.color}` : '1px solid var(--pl-border-secondary)',
               borderRadius: '6px',
-              backgroundColor: viewMode === v ? modeConfig.color : 'transparent',
-              color: viewMode === v ? '#FFFFFF' : 'var(--pl-text-secondary)',
+              backgroundColor: viewMode === v ? modeColors.color : 'transparent',
+              color: viewMode === v ? 'var(--pl-text-inverse)' : 'var(--pl-text-secondary)',
               cursor: 'pointer',
               textTransform: 'capitalize',
             }}
@@ -106,8 +107,8 @@ export function NudgesView({ mode }: NudgesViewProps) {
         ))}
       </div>
 
-      {viewMode === 'queue' && <QueueView queue={queue} modeConfig={modeConfig} onPause={handlePause} onResume={handleResume} onCancel={handleCancel} />}
-      {viewMode === 'sequences' && <SequencesList sequences={sequences} mode={mode} modeConfig={modeConfig} onCreated={() => loadSequences()} onDeleted={() => loadSequences()} />}
+      {viewMode === 'queue' && <QueueView queue={queue} modeColors={modeColors} onPause={handlePause} onResume={handleResume} onCancel={handleCancel} />}
+      {viewMode === 'sequences' && <SequencesList sequences={sequences} mode={mode} modeColors={modeColors} onCreated={() => loadSequences()} onDeleted={() => loadSequences()} />}
     </div>
   );
 }
@@ -116,13 +117,13 @@ export function NudgesView({ mode }: NudgesViewProps) {
 
 function QueueView({
   queue,
-  modeConfig,
+  modeColors,
   onPause,
   onResume,
   onCancel,
 }: {
   queue: QueueItem[];
-  modeConfig: { color: string };
+  modeColors: { color: string; bgColor: string };
   onPause: (id: string) => void;
   onResume: (id: string) => void;
   onCancel: (id: string) => void;
@@ -165,7 +166,7 @@ function QueueView({
                   padding: '2px 6px',
                   borderRadius: '4px',
                   backgroundColor: 'var(--pl-warning, #F59E0B)',
-                  color: '#FFFFFF',
+                  color: 'var(--pl-text-inverse)',
                   fontWeight: 500,
                 }}>
                   Paused
@@ -198,8 +199,8 @@ function QueueView({
                     fontWeight: 600,
                     border: 'none',
                     borderRadius: '4px',
-                    backgroundColor: modeConfig.color,
-                    color: '#FFFFFF',
+                    backgroundColor: modeColors.color,
+                    color: 'var(--pl-text-inverse)',
                     cursor: 'pointer',
                   }}
                 >
@@ -248,13 +249,13 @@ function QueueView({
 function SequencesList({
   sequences,
   mode,
-  modeConfig,
+  modeColors,
   onCreated,
   onDeleted,
 }: {
   sequences: Sequence[];
   mode: TransactionMode;
-  modeConfig: { color: string };
+  modeColors: { color: string; bgColor: string };
   onCreated: () => void;
   onDeleted: () => void;
 }) {
@@ -269,10 +270,10 @@ function SequencesList({
           padding: '8px',
           fontSize: '12px',
           fontWeight: 600,
-          border: `1px dashed ${modeConfig.color}`,
+          border: `1px dashed ${modeColors.color}`,
           borderRadius: '6px',
           backgroundColor: 'transparent',
-          color: modeConfig.color,
+          color: modeColors.color,
           cursor: 'pointer',
           marginBottom: '8px',
         }}
@@ -283,7 +284,7 @@ function SequencesList({
       {showCreate && (
         <CreateSequenceForm
           mode={mode}
-          modeConfig={modeConfig}
+          modeColors={modeColors}
           onCreated={() => { setShowCreate(false); onCreated(); }}
         />
       )}
@@ -335,11 +336,11 @@ function SequencesList({
 
 function CreateSequenceForm({
   mode,
-  modeConfig,
+  modeColors,
   onCreated,
 }: {
   mode: TransactionMode;
-  modeConfig: { color: string };
+  modeColors: { color: string; bgColor: string };
   onCreated: () => void;
 }) {
   const [name, setName] = useState('');
@@ -381,7 +382,7 @@ function CreateSequenceForm({
   };
 
   return (
-    <div className="pl-card" style={{ marginBottom: '8px', borderColor: modeConfig.color }}>
+    <div className="pl-card" style={{ marginBottom: '8px', borderColor: modeColors.color }}>
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -450,7 +451,7 @@ function CreateSequenceForm({
           onClick={addStep}
           style={{
             fontSize: '11px',
-            color: modeConfig.color,
+            color: modeColors.color,
             background: 'none',
             border: 'none',
             cursor: 'pointer',
@@ -471,8 +472,8 @@ function CreateSequenceForm({
             fontWeight: 600,
             border: 'none',
             borderRadius: '4px',
-            backgroundColor: name.trim() && !creating ? modeConfig.color : 'var(--pl-bg-tertiary)',
-            color: name.trim() && !creating ? '#FFFFFF' : 'var(--pl-text-tertiary)',
+            backgroundColor: name.trim() && !creating ? modeColors.color : 'var(--pl-bg-tertiary)',
+            color: name.trim() && !creating ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
             cursor: name.trim() && !creating ? 'pointer' : 'not-allowed',
           }}
         >

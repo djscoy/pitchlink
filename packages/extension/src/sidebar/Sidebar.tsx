@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { GmailAdapter, ThreadViewData } from '../gmail-adapter/GmailAdapter';
 import { useTheme } from './ThemeProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -10,8 +10,11 @@ import { TemplatePanel } from './views/TemplatePanel';
 import { OnboardingView } from './views/OnboardingView';
 import { BulkAssignView } from './views/BulkAssignView';
 import { NudgesView } from './views/NudgesView';
+import { SourceRegistryView } from './views/SourceRegistryView';
 import { MODE_CONFIG, TRANSACTION_MODES, SIDEBAR, APP_CONFIG } from '@pitchlink/shared';
 import type { TransactionMode } from '@pitchlink/shared';
+import { useModeColors } from './hooks/useModeColors';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { api } from '../utils/api';
 
 interface SidebarProps {
@@ -29,6 +32,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Check onboarding status on mount
   useEffect(() => {
@@ -54,7 +58,26 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
     return unsubscribe;
   }, [gmailAdapter]);
 
-  const modeConfig = MODE_CONFIG[activeMode];
+  const modeColors = useModeColors(activeMode);
+
+  // Keyboard shortcuts
+  const TABS: SidebarTab[] = ['pipeline', 'templates', 'nudges', 'history'];
+  const shortcuts = useMemo(() => ({
+    'alt+1': () => setActiveTab('pipeline'),
+    'alt+2': () => setActiveTab('templates'),
+    'alt+3': () => setActiveTab('nudges'),
+    'alt+4': () => setActiveTab('history'),
+    'alt+b': () => { setActiveMode('buy'); setActiveCampaignId(null); },
+    'alt+s': () => { setActiveMode('sell'); setActiveCampaignId(null); },
+    'alt+x': () => { setActiveMode('exchange'); setActiveCampaignId(null); },
+    'escape': () => {
+      if (showSettings) setShowSettings(false);
+      else if (showBulkAssign) setShowBulkAssign(false);
+      else if (activeCampaignId) setActiveCampaignId(null);
+    },
+  }), [showSettings, showBulkAssign, activeCampaignId]);
+
+  useKeyboardShortcuts(shortcuts);
 
   return (
     <div className="pl-sidebar" style={{ minHeight: '100%' }}>
@@ -91,12 +114,13 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           {TRANSACTION_MODES.map((mode) => {
             const config = MODE_CONFIG[mode];
             const isActive = mode === activeMode;
+            const shortcutKey = mode === 'buy' ? 'B' : mode === 'sell' ? 'S' : 'X';
             return (
               <button
                 key={mode}
                 onClick={() => {
                   setActiveMode(mode);
-                  setActiveCampaignId(null); // Reset campaign selection on mode switch
+                  setActiveCampaignId(null);
                 }}
                 style={{
                   padding: '3px 8px',
@@ -105,10 +129,11 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                   border: 'none',
                   borderRadius: '10px',
                   cursor: 'pointer',
-                  backgroundColor: isActive ? config.color : 'transparent',
-                  color: isActive ? '#FFFFFF' : 'var(--pl-text-secondary)',
+                  backgroundColor: isActive ? `var(--pl-mode-${mode})` : 'transparent',
+                  color: isActive ? 'var(--pl-text-inverse)' : 'var(--pl-text-secondary)',
                   transition: 'all 0.15s ease',
                 }}
+                title={`${config.label} mode (Alt+${shortcutKey})`}
               >
                 {config.label}
               </button>
@@ -116,25 +141,44 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           })}
         </div>
 
-        {/* Theme Toggle */}
-        <button
-          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            padding: '2px',
-            color: 'var(--pl-text-secondary)',
-          }}
-          title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`}
-        >
-          {resolvedTheme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19'}
-        </button>
+        {/* Right controls */}
+        <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+          {/* Settings */}
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              padding: '2px 4px',
+              color: showSettings ? 'var(--pl-text-primary)' : 'var(--pl-text-tertiary)',
+            }}
+            title="Settings"
+          >
+            &#9881;
+          </button>
+
+          {/* Theme Toggle */}
+          <button
+            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              padding: '2px 4px',
+              color: 'var(--pl-text-tertiary)',
+            }}
+            title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            {resolvedTheme === 'dark' ? '\u263C' : '\u263E'}
+          </button>
+        </div>
       </div>
 
-      {/* Tabs — only show when no thread is open and not in onboarding/bulk assign */}
-      {!currentThread && !showOnboarding && !showBulkAssign && (
+      {/* Tabs — only show when no thread is open and not in special views */}
+      {!currentThread && !showOnboarding && !showBulkAssign && !showSettings && (
         <div
           style={{
             display: 'flex',
@@ -142,7 +186,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
             backgroundColor: 'var(--pl-bg-secondary)',
           }}
         >
-          {(['pipeline', 'templates', 'nudges', 'history'] as SidebarTab[]).map((tab) => (
+          {TABS.map((tab, idx) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -154,7 +198,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                 border: 'none',
                 borderBottom:
                   activeTab === tab
-                    ? `2px solid ${modeConfig.color}`
+                    ? `2px solid ${modeColors.color}`
                     : '2px solid transparent',
                 backgroundColor: 'transparent',
                 color:
@@ -163,6 +207,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                 textTransform: 'capitalize',
                 transition: 'all 0.15s ease',
               }}
+              title={`${tab} (Alt+${idx + 1})`}
             >
               {tab}
             </button>
@@ -179,7 +224,26 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           minHeight: '200px',
         }}
       >
-        {showOnboarding && onboardingChecked ? (
+        {showSettings ? (
+          <ErrorBoundary section="settings-view">
+            <div style={{ marginBottom: '8px' }}>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '11px',
+                  color: 'var(--pl-text-tertiary)',
+                  cursor: 'pointer',
+                  padding: '0 4px 0 0',
+                }}
+              >
+                &larr; Back
+              </button>
+            </div>
+            <SourceRegistryView />
+          </ErrorBoundary>
+        ) : showOnboarding && onboardingChecked ? (
           <ErrorBoundary section="onboarding-view">
             <OnboardingView
               onComplete={() => setShowOnboarding(false)}
@@ -194,12 +258,10 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
             />
           </ErrorBoundary>
         ) : currentThread ? (
-          /* Thread is open — show contact panel */
           <ErrorBoundary section="contact-panel">
             <ContactPanel thread={currentThread} mode={activeMode} />
           </ErrorBoundary>
         ) : (
-          /* No thread — show dashboard/pipeline/history */
           <>
             {activeTab === 'pipeline' && (
               <ErrorBoundary section="pipeline-view">
