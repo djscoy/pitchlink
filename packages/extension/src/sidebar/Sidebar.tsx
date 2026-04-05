@@ -7,8 +7,12 @@ import { PipelineView } from './views/PipelineView';
 import { DashboardView } from './views/DashboardView';
 import { HistoryView } from './views/HistoryView';
 import { TemplatePanel } from './views/TemplatePanel';
+import { OnboardingView } from './views/OnboardingView';
+import { BulkAssignView } from './views/BulkAssignView';
+import { NudgesView } from './views/NudgesView';
 import { MODE_CONFIG, TRANSACTION_MODES, SIDEBAR, APP_CONFIG } from '@pitchlink/shared';
 import type { TransactionMode } from '@pitchlink/shared';
+import { api } from '../utils/api';
 
 interface SidebarProps {
   gmailAdapter: GmailAdapter;
@@ -22,6 +26,25 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<SidebarTab>('pipeline');
   const [currentThread, setCurrentThread] = useState<ThreadViewData | null>(null);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+
+  // Check onboarding status on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await api.onboarding.getStatus() as { data: { onboarding_complete: boolean } };
+        if (!result.data.onboarding_complete) {
+          setShowOnboarding(true);
+        }
+      } catch {
+        // If the check fails (e.g., not authenticated yet), skip onboarding
+      } finally {
+        setOnboardingChecked(true);
+      }
+    })();
+  }, []);
 
   // Listen for thread view changes
   useEffect(() => {
@@ -110,8 +133,8 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
         </button>
       </div>
 
-      {/* Tabs — only show when no thread is open (dashboard/pipeline mode) */}
-      {!currentThread && (
+      {/* Tabs — only show when no thread is open and not in onboarding/bulk assign */}
+      {!currentThread && !showOnboarding && !showBulkAssign && (
         <div
           style={{
             display: 'flex',
@@ -156,7 +179,21 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           minHeight: '200px',
         }}
       >
-        {currentThread ? (
+        {showOnboarding && onboardingChecked ? (
+          <ErrorBoundary section="onboarding-view">
+            <OnboardingView
+              onComplete={() => setShowOnboarding(false)}
+              onSkip={() => setShowOnboarding(false)}
+            />
+          </ErrorBoundary>
+        ) : showBulkAssign ? (
+          <ErrorBoundary section="bulk-assign-view">
+            <BulkAssignView
+              mode={activeMode}
+              onClose={() => setShowBulkAssign(false)}
+            />
+          </ErrorBoundary>
+        ) : currentThread ? (
           /* Thread is open — show contact panel */
           <ErrorBoundary section="contact-panel">
             <ContactPanel thread={currentThread} mode={activeMode} />
@@ -178,6 +215,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                     onNavigateToCampaign={(id) => {
                       setActiveCampaignId(id);
                     }}
+                    onBulkAssign={() => setShowBulkAssign(true)}
                   />
                 )}
               </ErrorBoundary>
@@ -189,21 +227,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
             )}
             {activeTab === 'nudges' && (
               <ErrorBoundary section="nudges-view">
-                <div style={{ textAlign: 'center', padding: '24px 12px' }}>
-                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>&#128276;</div>
-                  <div style={{ fontSize: '13px', color: 'var(--pl-text-secondary)' }}>
-                    Nudge Queue
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: 'var(--pl-text-tertiary)',
-                      marginTop: '4px',
-                    }}
-                  >
-                    Follow-up sequences will appear here (Phase 4).
-                  </div>
-                </div>
+                <NudgesView mode={activeMode} />
               </ErrorBoundary>
             )}
             {activeTab === 'history' && (

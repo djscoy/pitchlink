@@ -150,6 +150,75 @@ export const dealsService = {
     return data;
   },
 
+  async bulkCreate(
+    workspaceId: string,
+    input: {
+      contact_ids: string[];
+      campaign_id: string;
+      mode: 'buy' | 'sell' | 'exchange';
+      initial_stage: string;
+    },
+  ): Promise<{ created: number; skipped: number }> {
+    const rows = input.contact_ids.map((contact_id) => ({
+      workspace_id: workspaceId,
+      contact_id,
+      campaign_id: input.campaign_id,
+      mode: input.mode,
+      current_stage: input.initial_stage,
+      metadata: {},
+    }));
+
+    let totalCreated = 0;
+    const CHUNK_SIZE = 500;
+
+    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + CHUNK_SIZE);
+      const { data, error } = await supabaseAdmin
+        .from('deals')
+        .upsert(chunk, {
+          onConflict: 'contact_id,campaign_id',
+          ignoreDuplicates: true,
+        })
+        .select('id');
+
+      if (error) throw error;
+      totalCreated += (data || []).length;
+    }
+
+    // Batch-insert activities for created deals
+    if (totalCreated > 0) {
+      // Re-query to get IDs of deals we just created (within last few seconds)
+      const { data: newDeals } = await supabaseAdmin
+        .from('deals')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('campaign_id', input.campaign_id)
+        .eq('current_stage', input.initial_stage)
+        .order('created_at', { ascending: false })
+        .limit(totalCreated);
+
+      if (newDeals && newDeals.length > 0) {
+        const activities = newDeals.map((deal) => ({
+          deal_id: deal.id,
+          type: 'stage_changed' as const,
+          data: { from: null, to: input.initial_stage, reason: 'bulk_assign' },
+        }));
+
+        // Chunk activities too
+        for (let i = 0; i < activities.length; i += CHUNK_SIZE) {
+          await supabaseAdmin
+            .from('deal_activities')
+            .insert(activities.slice(i, i + CHUNK_SIZE));
+        }
+      }
+    }
+
+    return {
+      created: totalCreated,
+      skipped: input.contact_ids.length - totalCreated,
+    };
+  },
+
   async delete(workspaceId: string, dealId: string) {
     const { error } = await supabaseAdmin
       .from('deals')

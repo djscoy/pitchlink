@@ -117,6 +117,48 @@ export const contactsService = {
   },
 
   /**
+   * List contacts NOT assigned to a specific campaign
+   */
+  async listUnassigned(
+    workspaceId: string,
+    campaignId: string,
+    options?: { search?: string; limit?: number; offset?: number },
+  ) {
+    // Get contact IDs already in this campaign
+    const { data: assignedDeals, error: dealsError } = await supabaseAdmin
+      .from('deals')
+      .select('contact_id')
+      .eq('workspace_id', workspaceId)
+      .eq('campaign_id', campaignId);
+
+    if (dealsError) throw dealsError;
+
+    const assignedIds = (assignedDeals || []).map((d) => d.contact_id);
+
+    let query = supabaseAdmin
+      .from('contacts')
+      .select('*', { count: 'exact' })
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
+
+    if (assignedIds.length > 0) {
+      query = query.not('id', 'in', `(${assignedIds.join(',')})`);
+    }
+
+    if (options?.search) {
+      query = query.or(`email.ilike.%${options.search}%,name.ilike.%${options.search}%,domain.ilike.%${options.search}%`);
+    }
+
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+    return { contacts: data as Contact[], total: count || 0 };
+  },
+
+  /**
    * Get contacts for a specific campaign (via deals table)
    */
   async listByCampaign(workspaceId: string, campaignId: string) {

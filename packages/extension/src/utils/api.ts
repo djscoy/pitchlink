@@ -9,6 +9,8 @@ import type {
   IIEAnalyzeRequest,
   IIEConfirmRequest,
   SourceRegistryEntry,
+  OnboardingScanProgress,
+  OnboardingContact,
 } from '@pitchlink/shared';
 
 export async function apiRequest<T>(
@@ -57,8 +59,20 @@ export const api = {
     update: (id: string, data: { name?: string; tags?: string[]; notes?: string }) =>
       apiRequest<ApiResult<unknown>>('PATCH', `/contacts/${id}`, data),
     delete: (id: string) => apiRequest<void>('DELETE', `/contacts/${id}`),
+    enrich: (id: string) =>
+      apiRequest<ApiResult<{ data: Record<string, unknown>; providers_used: string[] }>>('POST', `/contacts/${id}/enrich`),
+    getEnrichment: (id: string) =>
+      apiRequest<ApiResult<{ summary: Record<string, unknown>; providers: { provider: string; fetched_at: string; expires_at: string }[] }>>('GET', `/contacts/${id}/enrichment`),
     exportCSV: (campaignId: string) =>
       apiRequest<string>('GET', `/contacts/campaign/${campaignId}/export`),
+    listUnassigned: (campaignId: string, params?: { search?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      query.set('campaign_id', campaignId);
+      if (params?.search) query.set('search', params.search);
+      if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.offset) query.set('offset', String(params.offset));
+      return apiRequest<ApiResult<unknown>>('GET', `/contacts/unassigned?${query.toString()}`);
+    },
   },
 
   // Campaigns
@@ -71,6 +85,10 @@ export const api = {
       return apiRequest<ApiResult<unknown>>('GET', `/campaigns${qs ? `?${qs}` : ''}`);
     },
     get: (id: string) => apiRequest<ApiResult<unknown>>('GET', `/campaigns/${id}`),
+    getDashboardStats: (mode?: string) => {
+      const qs = mode ? `?mode=${mode}` : '';
+      return apiRequest<ApiResult<{ total_contacts: number; active_campaigns: number; total_deals: number; recent_replies: number; active_enrollments: number; enriched_contacts: number }>>('GET', `/campaigns/dashboard-stats${qs}`);
+    },
     getStats: (id: string) => apiRequest<ApiResult<unknown>>('GET', `/campaigns/${id}/stats`),
     create: (data: { name: string; mode: string; pipeline_preset_id: string; client_id?: string }) =>
       apiRequest<ApiResult<unknown>>('POST', '/campaigns', data),
@@ -92,6 +110,12 @@ export const api = {
       mode: string;
       initial_stage: string;
     }) => apiRequest<ApiResult<unknown>>('POST', '/deals', data),
+    bulkCreate: (data: {
+      contact_ids: string[];
+      campaign_id: string;
+      mode: string;
+      initial_stage: string;
+    }) => apiRequest<ApiResult<{ created: number; skipped: number }>>('POST', '/deals/bulk', data),
     changeStage: (id: string, stage: string) =>
       apiRequest<ApiResult<unknown>>('PATCH', `/deals/${id}/stage`, { stage }),
     getActivities: (id: string) =>
@@ -122,6 +146,87 @@ export const api = {
     delete: (id: string) => apiRequest<void>('DELETE', `/templates/${id}`),
     resolve: (id: string, context: Record<string, string>) =>
       apiRequest<ApiResult<unknown>>('POST', `/templates/${id}/resolve`, context),
+  },
+
+  // Onboarding
+  onboarding: {
+    startScan: (config: { time_range_days?: number; min_interactions?: number; exclude_emails?: string[] }) =>
+      apiRequest<ApiResult<{ scan_id: string }>>('POST', '/onboarding/scan', config),
+    getScanProgress: (scanId: string) =>
+      apiRequest<ApiResult<OnboardingScanProgress>>('GET', `/onboarding/scan/${scanId}`),
+    getScanContacts: (scanId: string, params?: { status?: string; deal_status?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.status) query.set('status', params.status);
+      if (params?.deal_status) query.set('deal_status', params.deal_status);
+      if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.offset) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return apiRequest<ApiResult<{ contacts: OnboardingContact[]; total: number }>>('GET', `/onboarding/scan/${scanId}/contacts${qs ? `?${qs}` : ''}`);
+    },
+    updateContact: (contactId: string, data: { status?: string; name?: string; deal_status?: string }) =>
+      apiRequest<ApiResult<OnboardingContact>>('PATCH', `/onboarding/contacts/${contactId}`, data),
+    commitContacts: (scanId: string, campaignId?: string) =>
+      apiRequest<ApiResult<{ imported: number }>>('POST', `/onboarding/scan/${scanId}/commit`, { campaign_id: campaignId }),
+    restartScan: (scanId: string) =>
+      apiRequest<ApiResult<{ restarted: boolean }>>('POST', `/onboarding/scan/${scanId}/restart`),
+    getStatus: () =>
+      apiRequest<ApiResult<{ onboarding_complete: boolean }>>('GET', '/onboarding/status'),
+    getExcludedEmails: () =>
+      apiRequest<ApiResult<{ excluded_emails: string[]; excluded_domains: string[] }>>('GET', '/onboarding/excluded-emails'),
+    saveExcludedEmails: (data: { excluded_emails?: string[]; excluded_domains?: string[] }) =>
+      apiRequest<ApiResult<{ excluded_emails: string[]; excluded_domains: string[] }>>('PATCH', '/onboarding/excluded-emails', data),
+  },
+
+  // Sequences
+  sequences: {
+    list: (params?: { mode?: string }) => {
+      const qs = params?.mode ? `?mode=${params.mode}` : '';
+      return apiRequest<ApiResult<unknown>>('GET', `/sequences${qs}`);
+    },
+    get: (id: string) => apiRequest<ApiResult<unknown>>('GET', `/sequences/${id}`),
+    create: (data: { name: string; mode: string; steps_json: unknown[] }) =>
+      apiRequest<ApiResult<unknown>>('POST', '/sequences', data),
+    update: (id: string, data: { name?: string; steps_json?: unknown[]; is_active?: boolean }) =>
+      apiRequest<ApiResult<unknown>>('PATCH', `/sequences/${id}`, data),
+    delete: (id: string) => apiRequest<void>('DELETE', `/sequences/${id}`),
+    queue: (params?: { mode?: string; limit?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.mode) query.set('mode', params.mode);
+      if (params?.limit) query.set('limit', String(params.limit));
+      const qs = query.toString();
+      return apiRequest<ApiResult<unknown>>('GET', `/sequences/queue${qs ? `?${qs}` : ''}`);
+    },
+    enroll: (sequenceId: string, dealId: string) =>
+      apiRequest<ApiResult<unknown>>('POST', `/sequences/${sequenceId}/enroll`, { deal_id: dealId }),
+    enrollmentsByDeal: (dealId: string) =>
+      apiRequest<ApiResult<unknown>>('GET', `/sequences/enrollments/deal/${dealId}`),
+    pauseEnrollment: (enrollmentId: string) =>
+      apiRequest<ApiResult<unknown>>('POST', `/sequences/enrollments/${enrollmentId}/pause`),
+    resumeEnrollment: (enrollmentId: string) =>
+      apiRequest<ApiResult<unknown>>('POST', `/sequences/enrollments/${enrollmentId}/resume`),
+    cancelEnrollment: (enrollmentId: string) =>
+      apiRequest<ApiResult<unknown>>('POST', `/sequences/enrollments/${enrollmentId}/cancel`),
+  },
+
+  // AI Compose
+  compose: {
+    generate: (data: {
+      contactEmail: string;
+      contactName?: string;
+      contactDomain?: string;
+      campaignName?: string;
+      currentStage?: string;
+      mode: string;
+      threadSubject?: string;
+      instruction?: string;
+      replyContext?: string;
+    }) => apiRequest<ApiResult<{ subject: string; body: string }>>('POST', '/compose/generate', data),
+    saveDraft: (data: {
+      toEmail: string;
+      subject: string;
+      body: string;
+      threadId?: string;
+    }) => apiRequest<ApiResult<{ gmailDraftId: string }>>('POST', '/compose/save-draft', data),
   },
 
   // IIE (Inbox Identity Engine)

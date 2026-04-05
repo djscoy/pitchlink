@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { getAuth, requireAuth } from '../middleware/auth';
 import { contactsService, ConflictError } from '../services/contacts';
+import { enrichmentService } from '../services/enrichment';
 
 export const contactsRouter = Router();
 
@@ -55,6 +56,81 @@ contactsRouter.get('/lookup', async (req, res: Response) => {
   } catch (err) {
     console.error('[Contacts] Lookup error:', err);
     res.status(500).json({ error: { code: 'LOOKUP_FAILED', message: 'Failed to look up contact' } });
+  }
+});
+
+/**
+ * GET /api/contacts/unassigned?campaign_id=X
+ * List contacts NOT assigned to a specific campaign
+ */
+contactsRouter.get('/unassigned', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const { campaign_id, search, limit, offset } = req.query;
+
+    if (!campaign_id) {
+      return res.status(400).json({
+        error: { code: 'MISSING_CAMPAIGN', message: 'campaign_id query parameter is required' },
+      });
+    }
+
+    const result = await contactsService.listUnassigned(workspaceId, campaign_id as string, {
+      search: search as string,
+      limit: limit ? parseInt(limit as string) : 50,
+      offset: offset ? parseInt(offset as string) : 0,
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error('[Contacts] List unassigned error:', err);
+    res.status(500).json({ error: { code: 'LIST_FAILED', message: 'Failed to list unassigned contacts' } });
+  }
+});
+
+/**
+ * GET /api/contacts/enrichment/providers
+ * List available enrichment providers
+ */
+contactsRouter.get('/enrichment/providers', async (_req, res: Response) => {
+  try {
+    const available = enrichmentService.getAvailableProviders();
+    res.json({ data: { providers: available } });
+  } catch (err) {
+    console.error('[Contacts] Providers error:', err);
+    res.status(500).json({ error: { code: 'PROVIDERS_FAILED', message: 'Failed to list providers' } });
+  }
+});
+
+/**
+ * POST /api/contacts/:id/enrich
+ * Enrich a contact using available providers
+ */
+contactsRouter.post('/:id/enrich', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const result = await enrichmentService.enrich(workspaceId, req.params.id);
+    res.json({ data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Enrichment failed';
+    console.error('[Contacts] Enrich error:', err);
+    res.status(message.includes('not found') ? 404 : message.includes('No enrichment') ? 400 : 500).json({
+      error: { code: 'ENRICH_FAILED', message },
+    });
+  }
+});
+
+/**
+ * GET /api/contacts/:id/enrichment
+ * Get cached enrichment data for a contact
+ */
+contactsRouter.get('/:id/enrichment', async (req, res: Response) => {
+  try {
+    const summary = await enrichmentService.getSummary(req.params.id);
+    const cached = await enrichmentService.getCached(req.params.id);
+    res.json({ data: { summary, providers: cached.map((c) => ({ provider: c.provider, fetched_at: c.fetched_at, expires_at: c.expires_at })) } });
+  } catch (err) {
+    console.error('[Contacts] Get enrichment error:', err);
+    res.status(500).json({ error: { code: 'GET_ENRICHMENT_FAILED', message: 'Failed to get enrichment data' } });
   }
 });
 

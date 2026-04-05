@@ -37,6 +37,45 @@ dealsRouter.get('/campaign/:campaignId', async (req, res: Response) => {
 });
 
 /**
+ * POST /api/deals/bulk
+ * Bulk-assign contacts to a campaign (creates deals)
+ */
+dealsRouter.post('/bulk', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const { contact_ids, campaign_id, mode, initial_stage } = req.body;
+
+    if (!Array.isArray(contact_ids) || contact_ids.length === 0) {
+      return res.status(400).json({
+        error: { code: 'INVALID_CONTACT_IDS', message: 'contact_ids must be a non-empty array' },
+      });
+    }
+    if (contact_ids.length > 2000) {
+      return res.status(400).json({
+        error: { code: 'TOO_MANY_CONTACTS', message: 'Maximum 2000 contacts per bulk assign' },
+      });
+    }
+    if (!campaign_id || !mode || !initial_stage) {
+      return res.status(400).json({
+        error: { code: 'MISSING_FIELDS', message: 'campaign_id, mode, and initial_stage are required' },
+      });
+    }
+
+    const result = await dealsService.bulkCreate(workspaceId, {
+      contact_ids,
+      campaign_id,
+      mode,
+      initial_stage,
+    });
+
+    res.status(201).json({ data: result });
+  } catch (err) {
+    console.error('[Deals] Bulk create error:', err);
+    res.status(500).json({ error: { code: 'BULK_CREATE_FAILED', message: 'Failed to bulk-assign contacts' } });
+  }
+});
+
+/**
  * GET /api/deals/:id
  */
 dealsRouter.get('/:id', async (req, res: Response) => {

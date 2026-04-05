@@ -5,7 +5,7 @@
  * interacts through this adapter, making InboxSDK swappable if needed.
  */
 
-type ThreadViewHandler = (data: ThreadViewData) => void;
+type ThreadViewHandler = (data: ThreadViewData | null) => void;
 
 export interface ThreadViewData {
   threadId: string;
@@ -96,6 +96,14 @@ export class GmailAdapter {
         this.currentThreadData = data;
         this.notifyListeners(data);
       }
+
+      // Listen for thread view destruction (user navigates away)
+      if (threadView.on) {
+        threadView.on('destroy', () => {
+          this.currentThreadData = null;
+          this.notifyListeners(null);
+        });
+      }
     } catch (error) {
       console.error('[GmailAdapter] Error handling thread view:', error);
     }
@@ -127,7 +135,7 @@ export class GmailAdapter {
     return parts.length === 2 ? parts[1].toLowerCase() : '';
   }
 
-  private notifyListeners(data: ThreadViewData) {
+  private notifyListeners(data: ThreadViewData | null) {
     for (const listener of this.threadViewListeners) {
       try {
         listener(data);

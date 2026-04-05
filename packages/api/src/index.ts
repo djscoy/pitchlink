@@ -16,6 +16,10 @@ import { pipelinePresetsRouter } from './routes/pipeline-presets';
 import { templatesRouter } from './routes/templates';
 import { authRouter } from './routes/auth';
 import { iieRouter } from './routes/iie';
+import { onboardingRouter } from './routes/onboarding';
+import { composeRouter } from './routes/compose';
+import { sequencesRouter } from './routes/sequences';
+import { sequenceExecutorService } from './services/sequence-executor';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -43,11 +47,15 @@ app.use(
   }),
 );
 
+// Onboarding routes — exempt from general rate limit (one-time heavy operation)
+app.use('/api/onboarding', onboardingRouter);
+
 // Rate limiting
 const { generalLimiter, aiLimiter, webhookLimiter } = createRateLimiters();
 app.use('/api', generalLimiter);
 app.use('/api/gmail/webhook', webhookLimiter);
 app.use('/api/iie/analyze', aiLimiter);
+app.use('/api/compose/generate', aiLimiter);
 
 // ============================================================
 // Routes
@@ -62,6 +70,8 @@ app.use('/api/pipeline-presets', pipelinePresetsRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/iie', iieRouter);
+app.use('/api/compose', composeRouter);
+app.use('/api/sequences', sequencesRouter);
 
 // ============================================================
 // Error handler
@@ -91,6 +101,9 @@ app.use(
 app.listen(PORT, () => {
   console.log(`\n  \u26A1 PitchLink API running on http://localhost:${PORT}`);
   console.log(`  \u2764  Health check: http://localhost:${PORT}/api/health\n`);
+
+  // Start the sequence executor (fires scheduled nudge steps every 5 minutes)
+  sequenceExecutorService.start();
 });
 
 export default app;

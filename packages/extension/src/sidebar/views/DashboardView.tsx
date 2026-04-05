@@ -7,6 +7,7 @@ import { CampaignCardSkeleton } from '../components/Skeleton';
 interface DashboardViewProps {
   mode: TransactionMode;
   onNavigateToCampaign: (campaignId: string) => void;
+  onBulkAssign?: () => void;
 }
 
 interface CampaignListItem {
@@ -18,10 +19,20 @@ interface CampaignListItem {
   created_at: string;
 }
 
-export function DashboardView({ mode, onNavigateToCampaign }: DashboardViewProps) {
+interface DashboardStats {
+  total_contacts: number;
+  active_campaigns: number;
+  total_deals: number;
+  recent_replies: number;
+  active_enrollments: number;
+  enriched_contacts: number;
+}
+
+export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: DashboardViewProps) {
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
@@ -37,7 +48,16 @@ export function DashboardView({ mode, onNavigateToCampaign }: DashboardViewProps
     }
   }, [mode]);
 
-  useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
+  const loadStats = useCallback(async () => {
+    try {
+      const result = await api.campaigns.getDashboardStats(mode) as { data: DashboardStats };
+      setStats(result.data);
+    } catch (err) {
+      console.error('[Dashboard] Failed to load stats:', err);
+    }
+  }, [mode]);
+
+  useEffect(() => { loadCampaigns(); loadStats(); }, [loadCampaigns, loadStats]);
 
   const modeConfig = MODE_CONFIG[mode];
 
@@ -65,22 +85,58 @@ export function DashboardView({ mode, onNavigateToCampaign }: DashboardViewProps
         <div style={{ fontSize: '14px', fontWeight: 600 }}>
           {modeConfig.emoji} {modeConfig.label} Campaigns
         </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          style={{
-            padding: '4px 10px',
-            fontSize: '11px',
-            fontWeight: 600,
-            border: 'none',
-            borderRadius: '6px',
-            backgroundColor: modeConfig.color,
-            color: '#FFFFFF',
-            cursor: 'pointer',
-          }}
-        >
-          + New
-        </button>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {onBulkAssign && (
+            <button
+              onClick={onBulkAssign}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                border: `1px solid ${modeConfig.color}`,
+                borderRadius: '6px',
+                backgroundColor: 'transparent',
+                color: modeConfig.color,
+                cursor: 'pointer',
+              }}
+            >
+              Bulk Assign
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreateForm(true)}
+            style={{
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: 600,
+              border: 'none',
+              borderRadius: '6px',
+              backgroundColor: modeConfig.color,
+              color: '#FFFFFF',
+              cursor: 'pointer',
+            }}
+          >
+            + New
+          </button>
+        </div>
       </div>
+
+      {/* Metrics Grid */}
+      {stats && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '6px',
+          marginBottom: '12px',
+        }}>
+          <MetricCard label="Contacts" value={stats.total_contacts} color="var(--pl-text-primary)" />
+          <MetricCard label="Deals" value={stats.total_deals} color={modeConfig.color} />
+          <MetricCard label="Replies" value={stats.recent_replies} subtitle="30d" color="var(--pl-success, #10B981)" />
+          <MetricCard label="Sequences" value={stats.active_enrollments} color="var(--pl-text-secondary)" />
+          <MetricCard label="Enriched" value={stats.enriched_contacts} color="var(--pl-text-secondary)" />
+          <MetricCard label="Campaigns" value={stats.active_campaigns} color="var(--pl-text-secondary)" />
+        </div>
+      )}
 
       {/* Create Campaign Form */}
       {showCreateForm && (
@@ -296,6 +352,27 @@ function CreateCampaignForm({
         >
           {creating ? 'Creating...' : 'Create'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// --- Metric Card ---
+
+function MetricCard({ label, value, subtitle, color }: { label: string; value: number; subtitle?: string; color: string }) {
+  return (
+    <div
+      style={{
+        padding: '8px',
+        borderRadius: '6px',
+        backgroundColor: 'var(--pl-bg-secondary)',
+        border: '1px solid var(--pl-border-secondary)',
+        textAlign: 'center',
+      }}
+    >
+      <div style={{ fontSize: '16px', fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: '10px', color: 'var(--pl-text-tertiary)', marginTop: '2px' }}>
+        {label}{subtitle ? ` (${subtitle})` : ''}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { dealsService } from './deals';
 import { forwardDetectionService } from './forward-detection';
 import { sourceRegistryService } from './source-registry';
 import { extractEmail } from '../utils/email';
+import { sequencesService } from './sequences';
 import type { IIEResult } from '@pitchlink/shared';
 
 /**
@@ -268,6 +269,12 @@ export const replyDetectionService = {
         console.log(
           `[ReplyDetection] Auto-advanced deal ${deal.id} from ${deal.current_stage} to ${nextStage.id}`,
         );
+      }
+
+      // Auto-pause any active sequence enrollments for this deal
+      const paused = await sequencesService.pauseByDeal(deal.id, 'reply_received');
+      if (paused.length > 0) {
+        console.log(`[ReplyDetection] Auto-paused ${paused.length} sequence enrollment(s) for deal ${deal.id}`);
       }
     }
 

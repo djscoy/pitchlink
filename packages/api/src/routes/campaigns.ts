@@ -28,6 +28,22 @@ campaignsRouter.get('/', async (req, res: Response) => {
 });
 
 /**
+ * GET /api/campaigns/dashboard-stats
+ * Workspace-level dashboard metrics
+ */
+campaignsRouter.get('/dashboard-stats', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const { mode } = req.query;
+    const stats = await campaignsService.getDashboardStats(workspaceId, mode as string);
+    res.json({ data: stats });
+  } catch (err) {
+    console.error('[Campaigns] Dashboard stats error:', err);
+    res.status(500).json({ error: { code: 'STATS_FAILED', message: 'Failed to get dashboard stats' } });
+  }
+});
+
+/**
  * GET /api/campaigns/:id
  */
 campaignsRouter.get('/:id', async (req, res: Response) => {

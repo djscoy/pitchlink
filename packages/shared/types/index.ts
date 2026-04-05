@@ -39,6 +39,8 @@ export interface WorkspaceSettings {
   auto_enrich_on_create: boolean;
   theme_preference: 'light' | 'dark' | 'system';
   enabled_verticals: string[];
+  excluded_emails?: string[];
+  excluded_domains?: string[];
 }
 
 export interface WorkspaceBranding {
@@ -262,6 +264,76 @@ export interface EmailTracking {
   direction: 'inbound' | 'outbound';
   template_id?: string;
   created_at: string;
+}
+
+// --- Onboarding ---
+
+export type OnboardingScanStatus = 'pending' | 'scanning' | 'classifying' | 'drafting' | 'complete' | 'failed' | 'committing' | 'committed' | 'commit_failed';
+
+export type DealStatus = 'waiting_for_reply' | 'quoted_no_followup' | 'active_conversation' | 'completed_deal' | 'unclassified';
+
+export type OnboardingContactStatus = 'pending' | 'accepted' | 'rejected' | 'imported';
+
+export interface OnboardingScan {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  status: OnboardingScanStatus;
+  time_range_days: number;
+  min_interactions: number;
+  total_messages: number;
+  scanned_messages: number;
+  total_contacts_found: number;
+  classified_contacts: number;
+  drafts_created: number;
+  forwarding_addresses_found: number;
+  error_message?: string;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OnboardingContact {
+  id: string;
+  scan_id: string;
+  workspace_id: string;
+  email: string;
+  name?: string;
+  domain?: string;
+  interaction_count: number;
+  last_interaction_at?: string;
+  sent_count: number;
+  received_count: number;
+  deal_status?: DealStatus;
+  deal_status_confidence: number;
+  classification_reason?: string;
+  nudge_subject?: string;
+  nudge_body?: string;
+  nudge_gmail_draft_id?: string;
+  is_forwarding_address: boolean;
+  forwards_to_email?: string;
+  status: OnboardingContactStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OnboardingScanConfig {
+  time_range_days: number;
+  min_interactions: number;
+  exclude_emails?: string[];
+}
+
+export interface OnboardingScanProgress {
+  id: string;
+  status: OnboardingScanStatus;
+  total_messages: number;
+  scanned_messages: number;
+  total_contacts_found: number;
+  classified_contacts: number;
+  drafts_created: number;
+  forwarding_addresses_found: number;
+  error_message?: string;
 }
 
 // --- API Response Types ---

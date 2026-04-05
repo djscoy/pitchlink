@@ -88,6 +88,67 @@ export const campaignsService = {
   },
 
   /**
+   * Get workspace-level dashboard metrics for a given mode.
+   */
+  async getDashboardStats(workspaceId: string, mode?: string) {
+    // Total contacts
+    let contactQuery = supabaseAdmin
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId);
+    const { count: totalContacts } = await contactQuery;
+
+    // Active campaigns for this mode
+    let campaignQuery = supabaseAdmin
+      .from('campaigns')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'active');
+    if (mode) campaignQuery = campaignQuery.eq('mode', mode);
+    const { count: activeCampaigns } = await campaignQuery;
+
+    // Active deals
+    let dealsQuery = supabaseAdmin
+      .from('deals')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId);
+    if (mode) dealsQuery = dealsQuery.eq('mode', mode);
+    const { count: totalDeals } = await dealsQuery;
+
+    // Replies (email_received activities) in last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { count: recentReplies } = await supabaseAdmin
+      .from('deal_activities')
+      .select('id', { count: 'exact', head: true })
+      .eq('type', 'email_received')
+      .gte('created_at', thirtyDaysAgo);
+
+    // Active sequence enrollments
+    let enrollQuery = supabaseAdmin
+      .from('sequence_enrollments')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'active');
+    const { count: activeEnrollments } = await enrollQuery;
+
+    // Enriched contacts
+    const { count: enrichedContacts } = await supabaseAdmin
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .neq('enrichment_status', 'none');
+
+    return {
+      total_contacts: totalContacts || 0,
+      active_campaigns: activeCampaigns || 0,
+      total_deals: totalDeals || 0,
+      recent_replies: recentReplies || 0,
+      active_enrollments: activeEnrollments || 0,
+      enriched_contacts: enrichedContacts || 0,
+    };
+  },
+
+  /**
    * Get campaign stats: count of deals per stage
    */
   async getStats(workspaceId: string, campaignId: string) {

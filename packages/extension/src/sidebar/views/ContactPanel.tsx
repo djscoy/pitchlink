@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Contact, PipelinePreset, PipelineStage, TransactionMode, IIEResult } from '@pitchlink/shared';
+import type { Contact, PipelinePreset, PipelineStage, TransactionMode, IIEResult, Sequence } from '@pitchlink/shared';
 import { MODE_CONFIG } from '@pitchlink/shared';
 import { GmailAdapter, ThreadViewData } from '../../gmail-adapter/GmailAdapter';
 import { api } from '../../utils/api';
@@ -7,6 +7,7 @@ import { ContactCardSkeleton } from '../components/Skeleton';
 import { StageSelector } from '../components/StageSelector';
 import { ForwardPrompt } from '../../iie/ForwardPrompt';
 import { iieClient } from '../../iie/index';
+import { ComposePanel } from './ComposePanel';
 
 interface ContactPanelProps {
   thread: ThreadViewData;
@@ -41,9 +42,24 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [showAddDeal, setShowAddDeal] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const [showCompose, setShowCompose] = useState(false);
+
+  // Enrichment state
+  const [enrichmentData, setEnrichmentData] = useState<Record<string, unknown> | null>(null);
+  const [showEnrichment, setShowEnrichment] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+
+  // Sequence enrollment state
+  const [sequences, setSequences] = useState<Sequence[]>([]);
+  const [enrollments, setEnrollments] = useState<{ id: string; sequence: { id: string; name: string }; current_step: number; status: string; pause_reason?: string }[]>([]);
+  const [showEnroll, setShowEnroll] = useState(false);
+  const [selectedSequenceId, setSelectedSequenceId] = useState('');
+  const [enrollingDealId, setEnrollingDealId] = useState('');
 
   // IIE state
   const [iieResult, setIieResult] = useState<IIEResult | null>(null);
+  const [iieComplete, setIieComplete] = useState(false);
   const [showForwardPrompt, setShowForwardPrompt] = useState(false);
   const [resolvedOriginalEmail, setResolvedOriginalEmail] = useState<string | null>(null);
 
@@ -90,23 +106,76 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
     }
   }, [mode]);
 
+  const loadEnrichment = useCallback(async () => {
+    if (!contact) return;
+    try {
+      const res = await api.contacts.getEnrichment(contact.id) as { data: { summary: Record<string, unknown> } };
+      if (res.data?.summary && Object.keys(res.data.summary).length > 0) {
+        setEnrichmentData(res.data.summary);
+      }
+    } catch (err) {
+      console.error('[ContactPanel] Failed to load enrichment:', err);
+    }
+  }, [contact]);
+
+  useEffect(() => { loadEnrichment(); }, [loadEnrichment]);
+
+  const loadSequences = useCallback(async () => {
+    try {
+      const res = await api.sequences.list({ mode }) as { data: { sequences: Sequence[] } };
+      setSequences(res.data.sequences || []);
+    } catch (err) {
+      console.error('[ContactPanel] Failed to load sequences:', err);
+    }
+  }, [mode]);
+
+  const loadEnrollments = useCallback(async () => {
+    if (deals.length === 0) return;
+    try {
+      const allEnrollments: typeof enrollments = [];
+      for (const deal of deals) {
+        const res = await api.sequences.enrollmentsByDeal(deal.id) as { data: typeof enrollments };
+        if (res.data) allEnrollments.push(...res.data);
+      }
+      setEnrollments(allEnrollments);
+    } catch (err) {
+      console.error('[ContactPanel] Failed to load enrollments:', err);
+    }
+  }, [deals]);
+
+  useEffect(() => { loadSequences(); }, [loadSequences]);
+  useEffect(() => { loadEnrollments(); }, [loadEnrollments]);
+
+  // Wait for IIE to complete before loading contact — prevents race condition
+  // where forwarded emails get looked up with the forwarding address
   useEffect(() => {
-    loadContact();
-  }, [loadContact]);
+    if (iieComplete) {
+      loadContact();
+    }
+  }, [iieComplete, loadContact]);
 
   useEffect(() => {
     loadCampaigns();
   }, [loadCampaigns]);
 
   // Run IIE analysis when thread opens
+  // If messageId is missing (page reload race), use threadId as fallback
   useEffect(() => {
-    if (!thread.messageId) return;
+    if (!thread.messageId && !thread.threadId) {
+      // No IDs at all — skip IIE, allow contact load with sender email
+      setIieComplete(true);
+      return;
+    }
 
     let cancelled = false;
 
     (async () => {
       try {
-        const result = await iieClient.analyzeMessage(thread.messageId, thread.threadId);
+        // Use messageId if available, fall back to threadId
+        const result = await iieClient.analyzeMessage(
+          thread.messageId || thread.threadId,
+          thread.threadId,
+        );
         if (cancelled) return;
 
         setIieResult(result);
@@ -119,13 +188,17 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
         }
       } catch (err) {
         console.error('[ContactPanel] IIE analysis failed:', err);
+      } finally {
+        if (!cancelled) {
+          setIieComplete(true);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [thread.messageId]);
+  }, [thread.messageId, thread.threadId]);
 
   const handleForwardConfirm = async (email: string, name?: string) => {
     try {
@@ -198,6 +271,52 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
     } catch (err) {
       console.error('[ContactPanel] Failed to change stage:', err);
     }
+  };
+
+  const handleEnrich = async () => {
+    if (!contact) return;
+    setEnriching(true);
+    setEnrichError(null);
+    try {
+      const res = await api.contacts.enrich(contact.id) as { data: { data: Record<string, unknown>; providers_used: string[] } };
+      setEnrichmentData(res.data.data);
+      setShowEnrichment(true);
+      // Reload contact to get updated enrichment_status
+      loadContact();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Enrichment failed';
+      setEnrichError(msg);
+    } finally {
+      setEnriching(false);
+    }
+  };
+
+  const handleEnroll = async () => {
+    if (!selectedSequenceId || !enrollingDealId) return;
+    try {
+      await api.sequences.enroll(selectedSequenceId, enrollingDealId);
+      setShowEnroll(false);
+      setSelectedSequenceId('');
+      setEnrollingDealId('');
+      loadEnrollments();
+    } catch (err) {
+      console.error('[ContactPanel] Failed to enroll:', err);
+    }
+  };
+
+  const handlePauseEnrollment = async (enrollmentId: string) => {
+    await api.sequences.pauseEnrollment(enrollmentId);
+    loadEnrollments();
+  };
+
+  const handleResumeEnrollment = async (enrollmentId: string) => {
+    await api.sequences.resumeEnrollment(enrollmentId);
+    loadEnrollments();
+  };
+
+  const handleCancelEnrollment = async (enrollmentId: string) => {
+    await api.sequences.cancelEnrollment(enrollmentId);
+    loadEnrollments();
   };
 
   const handleAddToCampaign = async () => {
@@ -408,15 +527,97 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
           </div>
         )}
 
-        {/* Enrichment badge */}
-        <div style={{ marginTop: '8px' }}>
-          <span className={`pl-badge pl-enrichment-${contact.enrichment_status}`}>
-            {contact.enrichment_status === 'none' && 'Not enriched'}
-            {contact.enrichment_status === 'partial' && 'Partially enriched'}
-            {contact.enrichment_status === 'full' && 'Fully enriched'}
-          </span>
+        {/* Action buttons row */}
+        <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <button
+            onClick={handleEnrich}
+            disabled={enriching}
+            style={{
+              padding: '3px 10px',
+              fontSize: '11px',
+              fontWeight: 600,
+              border: '1px solid var(--pl-border-secondary)',
+              borderRadius: '4px',
+              backgroundColor: enriching ? 'var(--pl-bg-tertiary)' : 'transparent',
+              color: enriching ? 'var(--pl-text-tertiary)' : 'var(--pl-text-secondary)',
+              cursor: enriching ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {enriching ? 'Enriching...' : contact.enrichment_status === 'none' ? 'Enrich' : 'Re-enrich'}
+          </button>
+          {enrichmentData && (
+            <button
+              onClick={() => setShowEnrichment(!showEnrichment)}
+              style={{
+                padding: '3px 8px',
+                fontSize: '10px',
+                border: 'none',
+                borderRadius: '4px',
+                backgroundColor: showEnrichment ? 'var(--pl-bg-tertiary)' : 'transparent',
+                color: 'var(--pl-text-tertiary)',
+                cursor: 'pointer',
+              }}
+            >
+              {showEnrichment ? 'Hide data' : 'Show data'}
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={() => setShowCompose(!showCompose)}
+            style={{
+              padding: '3px 10px',
+              fontSize: '11px',
+              fontWeight: 600,
+              border: `1px solid ${modeConfig.color}`,
+              borderRadius: '4px',
+              backgroundColor: showCompose ? modeConfig.color : 'transparent',
+              color: showCompose ? '#FFFFFF' : modeConfig.color,
+              cursor: 'pointer',
+            }}
+          >
+            {showCompose ? 'Close' : 'Compose'}
+          </button>
         </div>
+        {enrichError && (
+          <div style={{ fontSize: '11px', color: '#EF4444', marginTop: '4px' }}>{enrichError}</div>
+        )}
       </div>
+
+      {/* Enrichment Data */}
+      {showEnrichment && enrichmentData && (
+        <div className="pl-card" style={{ marginTop: '6px', padding: '10px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+            Enrichment Data
+          </div>
+          {Object.entries(enrichmentData)
+            .filter(([, v]) => v !== null && v !== undefined && v !== '' && typeof v !== 'object')
+            .map(([key, value]) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: '11px' }}>
+                <span style={{ color: 'var(--pl-text-tertiary)', textTransform: 'capitalize' }}>
+                  {key.replace(/_/g, ' ')}
+                </span>
+                <span style={{ color: 'var(--pl-text-primary)', maxWidth: '60%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {String(value)}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* AI Compose Panel */}
+      {showCompose && (
+        <ComposePanel
+          mode={mode}
+          contactEmail={contact.email}
+          contactName={contact.name}
+          contactDomain={contact.domain}
+          campaignName={deals.length > 0 ? deals[0].campaign.name : undefined}
+          currentStage={deals.length > 0 ? deals[0].current_stage : undefined}
+          threadSubject={thread.subject}
+          threadId={thread.threadId !== 'pending' ? thread.threadId : undefined}
+          onClose={() => setShowCompose(false)}
+        />
+      )}
 
       {/* Deals / Campaigns */}
       <div style={{ marginTop: '8px' }}>
@@ -521,6 +722,179 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
           );
         })}
       </div>
+
+      {/* Sequence Enrollments */}
+      {deals.length > 0 && (
+        <div style={{ marginTop: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Sequences
+            </div>
+            {sequences.length > 0 && deals.length > 0 && !showEnroll && (
+              <button
+                onClick={() => setShowEnroll(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '11px',
+                  color: modeConfig.color,
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                }}
+              >
+                + Enroll
+              </button>
+            )}
+          </div>
+
+          {/* Enroll form */}
+          {showEnroll && (
+            <div className="pl-card" style={{ padding: '8px 10px', marginBottom: '6px' }}>
+              <select
+                value={enrollingDealId}
+                onChange={(e) => setEnrollingDealId(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '4px 6px',
+                  fontSize: '12px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--pl-border-secondary)',
+                  backgroundColor: 'var(--pl-bg-primary)',
+                  color: 'var(--pl-text-primary)',
+                  marginBottom: '4px',
+                }}
+              >
+                <option value="">Select deal...</option>
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>{d.campaign.name}</option>
+                ))}
+              </select>
+              <select
+                value={selectedSequenceId}
+                onChange={(e) => setSelectedSequenceId(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '4px 6px',
+                  fontSize: '12px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--pl-border-secondary)',
+                  backgroundColor: 'var(--pl-bg-primary)',
+                  color: 'var(--pl-text-primary)',
+                  marginBottom: '6px',
+                }}
+              >
+                <option value="">Select sequence...</option>
+                {sequences.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => { setShowEnroll(false); setSelectedSequenceId(''); setEnrollingDealId(''); }}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    border: '1px solid var(--pl-border-secondary)',
+                    borderRadius: '4px',
+                    backgroundColor: 'transparent',
+                    color: 'var(--pl-text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEnroll}
+                  disabled={!selectedSequenceId || !enrollingDealId}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    border: 'none',
+                    borderRadius: '4px',
+                    backgroundColor: selectedSequenceId && enrollingDealId ? modeConfig.color : 'var(--pl-bg-tertiary)',
+                    color: selectedSequenceId && enrollingDealId ? '#FFFFFF' : 'var(--pl-text-tertiary)',
+                    cursor: selectedSequenceId && enrollingDealId ? 'pointer' : 'default',
+                  }}
+                >
+                  Enroll
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Active enrollments */}
+          {enrollments.filter((e) => e.status === 'active' || e.status === 'paused').map((enrollment) => (
+            <div key={enrollment.id} className="pl-card" style={{ padding: '8px 10px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 500 }}>{enrollment.sequence.name}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>
+                    Step {enrollment.current_step + 1} &middot;{' '}
+                    <span style={{ color: enrollment.status === 'paused' ? 'var(--pl-warning, #F59E0B)' : modeConfig.color }}>
+                      {enrollment.status}
+                    </span>
+                    {enrollment.pause_reason && ` (${enrollment.pause_reason === 'reply_received' ? 'replied' : enrollment.pause_reason})`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {enrollment.status === 'paused' ? (
+                    <button
+                      onClick={() => handleResumeEnrollment(enrollment.id)}
+                      style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        border: 'none',
+                        borderRadius: '4px',
+                        backgroundColor: modeConfig.color,
+                        color: '#FFFFFF',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Resume
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handlePauseEnrollment(enrollment.id)}
+                      style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        border: '1px solid var(--pl-border-secondary)',
+                        borderRadius: '4px',
+                        backgroundColor: 'transparent',
+                        color: 'var(--pl-text-secondary)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Pause
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleCancelEnrollment(enrollment.id)}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '10px',
+                      border: '1px solid var(--pl-border-secondary)',
+                      borderRadius: '4px',
+                      backgroundColor: 'transparent',
+                      color: 'var(--pl-text-tertiary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {enrollments.length === 0 && !showEnroll && (
+            <div style={{ fontSize: '12px', color: 'var(--pl-text-tertiary)', fontStyle: 'italic' }}>
+              Not enrolled in any sequence
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
