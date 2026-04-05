@@ -428,7 +428,7 @@ export const onboardingScanService = {
       .from('onboarding_scans')
       .select('id')
       .eq('workspace_id', workspaceId)
-      .eq('status', 'complete')
+      .in('status', ['complete', 'committed', 'committing'])
       .limit(1);
 
     return (data?.length ?? 0) > 0;

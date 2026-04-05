@@ -50,10 +50,11 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
     })();
   }, []);
 
-  // Listen for thread view changes
+  // Listen for thread view changes — auto-dismiss settings when a thread opens
   useEffect(() => {
     const unsubscribe = gmailAdapter.onThreadView((data) => {
       setCurrentThread(data);
+      if (data) setShowSettings(false);
     });
     return unsubscribe;
   }, [gmailAdapter]);
