@@ -8,7 +8,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../utils/api';
 
-export function MyEmailsView() {
+interface MyEmailsViewProps {
+  onEmailsChanged?: () => void;
+}
+
+export function MyEmailsView({ onEmailsChanged }: MyEmailsViewProps = {}) {
   const [emails, setEmails] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,6 +45,7 @@ export function MyEmailsView() {
       setEmails(result.data?.owned_emails || updated);
       setStatusMessage(`Saved ${updated.length} email(s)`);
       setTimeout(() => setStatusMessage(null), 2000);
+      onEmailsChanged?.();
     } catch (err) {
       console.error('[MyEmails] Failed to save:', err);
       setStatusMessage('Failed to save');

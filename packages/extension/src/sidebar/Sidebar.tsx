@@ -37,6 +37,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [showBulkAssign, setShowBulkAssign] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'auto-reply' | 'my-emails' | 'source-registry'>('auto-reply');
+  const [userEmailsVersion, setUserEmailsVersion] = useState(0);
   const [replyCount, setReplyCount] = useState(0);
 
   // Check onboarding status on mount
@@ -70,8 +71,8 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch user's own email addresses on mount and pass to adapter
-  // so it can filter them out when identifying the external contact
+  // Fetch user's own email addresses and pass to adapter
+  // Re-fetches when userEmailsVersion changes (e.g., after saving new addresses)
   useEffect(() => {
     (async () => {
       try {
@@ -83,7 +84,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
         // Non-fatal — adapter falls back to first message sender
       }
     })();
-  }, [gmailAdapter]);
+  }, [gmailAdapter, userEmailsVersion]);
 
   // Listen for thread view changes — auto-dismiss settings when a thread opens
   useEffect(() => {
@@ -347,7 +348,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
               ))}
             </div>
             {settingsTab === 'auto-reply' && <AutoReplySettingsView />}
-            {settingsTab === 'my-emails' && <MyEmailsView />}
+            {settingsTab === 'my-emails' && <MyEmailsView onEmailsChanged={() => setUserEmailsVersion((v) => v + 1)} />}
             {settingsTab === 'source-registry' && <SourceRegistryView />}
           </ErrorBoundary>
         ) : showOnboarding && onboardingChecked ? (
