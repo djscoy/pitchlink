@@ -12,6 +12,7 @@ import { BulkAssignView } from './views/BulkAssignView';
 import { NudgesView } from './views/NudgesView';
 import { DiscoveryView } from './views/DiscoveryView';
 import { SourceRegistryView } from './views/SourceRegistryView';
+import { MyEmailsView } from './views/MyEmailsView';
 import { MODE_CONFIG, TRANSACTION_MODES, SIDEBAR, APP_CONFIG } from '@pitchlink/shared';
 import type { TransactionMode } from '@pitchlink/shared';
 import { useModeColors } from './hooks/useModeColors';
@@ -66,6 +67,21 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
     const interval = setInterval(fetchReplyCount, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch user's own email addresses on mount and pass to adapter
+  // so it can filter them out when identifying the external contact
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await api.auth.myEmails() as { data: { emails: string[] } };
+        if (result.data?.emails) {
+          gmailAdapter.setUserEmails(result.data.emails);
+        }
+      } catch {
+        // Non-fatal — adapter falls back to first message sender
+      }
+    })();
+  }, [gmailAdapter]);
 
   // Listen for thread view changes — auto-dismiss settings when a thread opens
   useEffect(() => {
@@ -302,6 +318,8 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                 &larr; Back
               </button>
             </div>
+            <MyEmailsView />
+            <div style={{ margin: '16px 0', borderTop: '1px solid var(--pl-border-secondary)' }} />
             <SourceRegistryView />
           </ErrorBoundary>
         ) : showOnboarding && onboardingChecked ? (

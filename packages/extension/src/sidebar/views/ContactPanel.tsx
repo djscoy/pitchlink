@@ -396,10 +396,12 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
             New Contact
           </div>
           <div style={{ fontSize: '12px', color: 'var(--pl-text-secondary)', marginBottom: '4px' }}>
-            {thread.senderName || thread.senderEmail}
+            {resolvedOriginalEmail
+              ? (iieResult?.original_sender_name || displayEmail)
+              : (thread.senderName || displayEmail)}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)', marginBottom: '12px' }}>
-            {thread.senderEmail} &middot; {domain}
+            {displayEmail} &middot; {domain}
           </div>
           <button
             onClick={handleAddContact}

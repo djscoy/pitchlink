@@ -313,6 +313,12 @@ export const api = {
   auth: {
     renewWatches: () =>
       apiRequest<ApiResult<{ renewed: number; failed: number }>>('POST', '/auth/renew-watches'),
+    myEmails: () =>
+      apiRequest<ApiResult<{ emails: string[] }>>('GET', '/auth/my-emails'),
+    getOwnedEmails: () =>
+      apiRequest<ApiResult<{ owned_emails: string[] }>>('GET', '/auth/owned-emails'),
+    saveOwnedEmails: (owned_emails: string[]) =>
+      apiRequest<ApiResult<{ owned_emails: string[] }>>('PATCH', '/auth/owned-emails', { owned_emails }),
   },
 
   // IIE (Inbox Identity Engine)

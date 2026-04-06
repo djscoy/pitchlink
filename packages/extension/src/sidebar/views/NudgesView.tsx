@@ -260,11 +260,12 @@ function SequencesList({
   onDeleted: () => void;
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div>
       <button
-        onClick={() => setShowCreate(!showCreate)}
+        onClick={() => { setShowCreate(!showCreate); setEditingId(null); }}
         style={{
           width: '100%',
           padding: '8px',
@@ -297,6 +298,19 @@ function SequencesList({
 
       {sequences.map((seq) => {
         const steps = (seq.steps_json || []) as SequenceStep[];
+
+        if (editingId === seq.id) {
+          return (
+            <EditSequenceForm
+              key={seq.id}
+              sequence={seq}
+              modeColors={modeColors}
+              onSaved={() => { setEditingId(null); onCreated(); }}
+              onCancel={() => setEditingId(null)}
+            />
+          );
+        }
+
         return (
           <div key={seq.id} className="pl-card" style={{ marginBottom: '6px', padding: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -307,27 +321,211 @@ function SequencesList({
                   {steps.map((s) => `${s.delay_days}d`).join(' → ')}
                 </div>
               </div>
-              <button
-                onClick={async () => {
-                  await api.sequences.delete(seq.id);
-                  onDeleted();
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '12px',
-                  color: 'var(--pl-text-tertiary)',
-                  cursor: 'pointer',
-                  padding: '2px 4px',
-                }}
-                title="Delete sequence"
-              >
-                &#10005;
-              </button>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  onClick={() => { setEditingId(seq.id); setShowCreate(false); }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '11px',
+                    color: modeColors.color,
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                  }}
+                  title="Edit sequence"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={async () => {
+                    await api.sequences.delete(seq.id);
+                    onDeleted();
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '12px',
+                    color: 'var(--pl-text-tertiary)',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                  }}
+                  title="Delete sequence"
+                >
+                  &#10005;
+                </button>
+              </div>
             </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// --- Edit Sequence Form ---
+
+function EditSequenceForm({
+  sequence,
+  modeColors,
+  onSaved,
+  onCancel,
+}: {
+  sequence: Sequence;
+  modeColors: { color: string; bgColor: string };
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const existingSteps = (sequence.steps_json || []) as SequenceStep[];
+  const [name, setName] = useState(sequence.name);
+  const [steps, setSteps] = useState<{ delay_days: number; use_ai_generate: boolean }[]>(
+    existingSteps.map((s) => ({ delay_days: s.delay_days, use_ai_generate: s.use_ai_generate ?? true })),
+  );
+  const [saving, setSaving] = useState(false);
+
+  const addStep = () => {
+    setSteps([...steps, { delay_days: 5, use_ai_generate: true }]);
+  };
+
+  const removeStep = (idx: number) => {
+    setSteps(steps.filter((_, i) => i !== idx));
+  };
+
+  const updateStep = (idx: number, delay: number) => {
+    setSteps(steps.map((s, i) => i === idx ? { ...s, delay_days: delay } : s));
+  };
+
+  const handleSave = async () => {
+    if (!name.trim() || steps.length === 0) return;
+    setSaving(true);
+    try {
+      const stepsJson: SequenceStep[] = steps.map((s, i) => ({
+        id: `step-${i + 1}`,
+        position: i,
+        delay_days: s.delay_days,
+        use_ai_generate: s.use_ai_generate,
+      }));
+      await api.sequences.update(sequence.id, { name: name.trim(), steps_json: stepsJson });
+      onSaved();
+    } catch (err) {
+      console.error('[NudgesView] Update failed:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="pl-card" style={{ marginBottom: '8px', borderColor: modeColors.color }}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Sequence name..."
+        autoFocus
+        style={{
+          width: '100%',
+          padding: '6px 8px',
+          fontSize: '13px',
+          border: '1px solid var(--pl-border-secondary)',
+          borderRadius: '4px',
+          backgroundColor: 'var(--pl-bg-primary)',
+          color: 'var(--pl-text-primary)',
+          marginBottom: '8px',
+          boxSizing: 'border-box',
+        }}
+      />
+
+      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', marginBottom: '6px' }}>
+        Steps (AI-generated follow-ups)
+      </div>
+
+      {steps.map((step, idx) => (
+        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)', width: '50px' }}>
+            Step {idx + 1}:
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={30}
+            value={step.delay_days}
+            onChange={(e) => updateStep(idx, parseInt(e.target.value) || 1)}
+            style={{
+              width: '50px',
+              padding: '3px 6px',
+              fontSize: '12px',
+              border: '1px solid var(--pl-border-secondary)',
+              borderRadius: '4px',
+              backgroundColor: 'var(--pl-bg-primary)',
+              color: 'var(--pl-text-primary)',
+              textAlign: 'center',
+            }}
+          />
+          <span style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>days</span>
+          {steps.length > 1 && (
+            <button
+              onClick={() => removeStep(idx)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '12px',
+                color: 'var(--pl-text-tertiary)',
+                cursor: 'pointer',
+                padding: '0 2px',
+              }}
+            >
+              &#10005;
+            </button>
+          )}
+        </div>
+      ))}
+
+      {steps.length < 5 && (
+        <button
+          onClick={addStep}
+          style={{
+            fontSize: '11px',
+            color: modeColors.color,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '4px 0',
+          }}
+        >
+          + Add step
+        </button>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '8px' }}>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '6px 14px',
+            fontSize: '12px',
+            border: '1px solid var(--pl-border-secondary)',
+            borderRadius: '4px',
+            backgroundColor: 'transparent',
+            color: 'var(--pl-text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={!name.trim() || steps.length === 0 || saving}
+          style={{
+            padding: '6px 14px',
+            fontSize: '12px',
+            fontWeight: 600,
+            border: 'none',
+            borderRadius: '4px',
+            backgroundColor: name.trim() && !saving ? modeColors.color : 'var(--pl-bg-tertiary)',
+            color: name.trim() && !saving ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
+            cursor: name.trim() && !saving ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
     </div>
   );
 }
