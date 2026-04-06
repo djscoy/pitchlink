@@ -26,6 +26,10 @@ export interface ComposeRequest {
   threadSubject?: string;
   instruction?: string; // e.g. "ask about their pricing for a homepage link"
   replyContext?: string; // last few messages for reply context
+  templateBase?: {      // resolved template to personalize
+    subject: string;
+    body: string;
+  };
 }
 
 export interface ComposeResult {
@@ -70,16 +74,37 @@ export const aiComposeService = {
 
     const isReply = Boolean(request.replyContext || request.threadSubject);
 
-    const prompt = `${MODE_PROMPTS[request.mode] || MODE_PROMPTS.buy}
+    // Template-based personalization mode
+    const templateBlock = request.templateBase
+      ? `\nBase template to personalize:
+Subject: ${request.templateBase.subject}
+Body:
+${request.templateBase.body}
 
-Draft a ${isReply ? 'reply' : 'new'} email to: ${contactLabel}
-${contextBlock}${replyBlock}${instructionBlock}
+Rewrite this template to sound natural and personalized for ${contactLabel}.
+Keep ALL pricing, specs, numbers, URLs, and factual details exactly as written.
+Vary the greeting, phrasing, and sentence structure so it doesn't sound copy-pasted.`
+      : '';
 
-Guidelines:
+    const guidelines = request.templateBase
+      ? `Guidelines:
+- Preserve every piece of factual content (prices, specs, timelines, links)
+- Make the greeting and transitions natural for this specific contact
+- Keep the same length — don't shorten or expand significantly
+- Sound human and personal, not like a mass email
+- No placeholder text like [YOUR NAME]`
+      : `Guidelines:
 - Keep it short (3-5 sentences for outreach, 2-3 for follow-ups)
 - Sound human, not templated
 - No placeholder text like [YOUR NAME] — leave the sign-off as just a dash or nothing
-- Match the ${request.mode} mode tone
+- Match the ${request.mode} mode tone`;
+
+    const prompt = `${MODE_PROMPTS[request.mode] || MODE_PROMPTS.buy}
+
+${request.templateBase ? 'Personalize this template for' : `Draft a ${isReply ? 'reply' : 'new'} email to`}: ${contactLabel}
+${contextBlock}${replyBlock}${templateBlock}${!request.templateBase ? instructionBlock : (request.instruction ? `\nAdditional instruction: ${request.instruction}` : '')}
+
+${guidelines}
 
 Return ONLY valid JSON with no other text:
 {"subject": "...", "body": "..."}`;

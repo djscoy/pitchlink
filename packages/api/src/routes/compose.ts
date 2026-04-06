@@ -30,6 +30,7 @@ composeRouter.post('/generate', async (req, res: Response) => {
       threadSubject,
       instruction,
       replyContext,
+      templateBase,
     } = req.body;
 
     if (!contactEmail || !mode) {
@@ -48,6 +49,7 @@ composeRouter.post('/generate', async (req, res: Response) => {
       threadSubject,
       instruction,
       replyContext,
+      templateBase,
     });
 
     res.json({ data: result });

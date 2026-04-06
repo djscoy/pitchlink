@@ -237,6 +237,7 @@ export const api = {
       threadSubject?: string;
       instruction?: string;
       replyContext?: string;
+      templateBase?: { subject: string; body: string };
     }) => apiRequest<ApiResult<{ subject: string; body: string }>>('POST', '/compose/generate', data),
     saveDraft: (data: {
       toEmail: string;

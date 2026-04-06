@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { TransactionMode } from '@pitchlink/shared';
+import { useState, useEffect } from 'react';
+import type { TransactionMode, Template } from '@pitchlink/shared';
 import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 
@@ -34,8 +34,49 @@ export function ComposePanel({
   const [saved, setSaved] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateBase, setTemplateBase] = useState<{ subject: string; body: string } | null>(null);
 
   const modeColors = useModeColors(mode);
+
+  // Load templates for the current mode
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.templates.list(mode) as { data: { templates: Template[] } };
+        setTemplates(res.data?.templates || []);
+      } catch {
+        // Non-fatal
+      }
+    })();
+  }, [mode]);
+
+  // When a template is selected, resolve its variables
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) {
+      setTemplateBase(null);
+      return;
+    }
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+
+    // Client-side variable resolution
+    const resolve = (text: string) =>
+      text
+        .replace(/\{\{contact_name\}\}/g, contactName || contactEmail.split('@')[0])
+        .replace(/\{\{contact_email\}\}/g, contactEmail)
+        .replace(/\{\{domain\}\}/g, contactDomain || '')
+        .replace(/\{\{campaign_name\}\}/g, campaignName || '')
+        .replace(/\{\{sender_name\}\}/g, '')
+        .replace(/\{\{sender_email\}\}/g, '');
+
+    setTemplateBase({
+      subject: resolve(tpl.subject),
+      body: resolve(tpl.body_html),
+    });
+  };
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -51,6 +92,7 @@ export function ComposePanel({
         mode,
         threadSubject,
         instruction: instruction || undefined,
+        templateBase: templateBase || undefined,
       }) as { data: { subject: string; body: string } };
 
       setSubject(res.data.subject || '');
@@ -118,6 +160,40 @@ export function ComposePanel({
           {campaignName && <span> &middot; {campaignName}</span>}
           {currentStage && <span> &middot; {currentStage}</span>}
         </div>
+
+        {/* Template picker */}
+        {templates.length > 0 && (
+          <div style={{ marginBottom: '8px' }}>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => handleTemplateSelect(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                fontSize: '11px',
+                border: '1px solid var(--pl-border-secondary)',
+                borderRadius: '4px',
+                backgroundColor: 'var(--pl-bg-primary)',
+                color: 'var(--pl-text-primary)',
+              }}
+            >
+              <option value="">No template (free-form AI)</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            {templateBase && (
+              <div style={{
+                fontSize: '10px',
+                color: '#059669',
+                marginTop: '3px',
+                fontWeight: 500,
+              }}>
+                AI will personalize this template while keeping all key details
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Instruction input */}
         <textarea
