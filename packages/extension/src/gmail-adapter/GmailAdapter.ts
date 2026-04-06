@@ -59,7 +59,17 @@ export class GmailAdapter {
       const contactSender = this.findExternalContact(messageViews);
 
       // Fall back to first message sender if no external contact found
-      const fallbackSender = messageViews[0].getSender();
+      let fallbackSender = null;
+      try {
+        fallbackSender = messageViews[0].getSender();
+      } catch {
+        // First message DOM not loaded — try last message instead
+        try {
+          fallbackSender = messageViews[messageViews.length - 1].getSender();
+        } catch {
+          // No sender available from any message
+        }
+      }
       const sender = contactSender || fallbackSender;
 
       const data: ThreadViewData = {
@@ -143,21 +153,30 @@ export class GmailAdapter {
     if (this.userEmails.size === 0) return null;
 
     // 1. Check all message senders — find the first one that isn't the user
+    //    getSender() can throw on collapsed/unloaded messages, so wrap in try/catch
     for (const mv of messageViews) {
-      const sender = mv.getSender?.();
-      if (sender?.emailAddress && !this.userEmails.has(sender.emailAddress.toLowerCase())) {
-        return sender;
+      try {
+        const sender = mv.getSender?.();
+        if (sender?.emailAddress && !this.userEmails.has(sender.emailAddress.toLowerCase())) {
+          return sender;
+        }
+      } catch {
+        // Message DOM not loaded (collapsed) — skip to next
       }
     }
 
     // 2. All senders are the user — check recipients of the first message
     //    (the user sent the initial email, so the To: address is the contact)
     for (const mv of messageViews) {
-      const recipients = mv.getRecipients?.() || [];
-      for (const recipient of recipients) {
-        if (recipient?.emailAddress && !this.userEmails.has(recipient.emailAddress.toLowerCase())) {
-          return recipient;
+      try {
+        const recipients = mv.getRecipients?.() || [];
+        for (const recipient of recipients) {
+          if (recipient?.emailAddress && !this.userEmails.has(recipient.emailAddress.toLowerCase())) {
+            return recipient;
+          }
         }
+      } catch {
+        // Recipients not available — skip
       }
       // Only check first message's recipients
       break;
