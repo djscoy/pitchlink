@@ -331,4 +331,24 @@ export const sequencesService = {
     if (error) throw error;
     return data as SequenceEnrollment;
   },
+
+  /**
+   * Skip the current step without executing it (manual skip from sidebar).
+   */
+  async skipStep(workspaceId: string, enrollmentId: string) {
+    const { data: enrollment, error: fetchError } = await supabaseAdmin
+      .from('sequence_enrollments')
+      .select('*, sequence:sequences(steps_json)')
+      .eq('workspace_id', workspaceId)
+      .eq('id', enrollmentId)
+      .single();
+
+    if (fetchError) throw fetchError;
+    if (enrollment.status !== 'active') {
+      throw new Error('Can only skip steps on active enrollments');
+    }
+
+    const steps = (enrollment.sequence as Sequence).steps_json as SequenceStep[];
+    return this.advanceStep(enrollmentId, steps);
+  },
 };

@@ -223,6 +223,8 @@ export const api = {
       apiRequest<ApiResult<unknown>>('POST', `/sequences/enrollments/${enrollmentId}/resume`),
     cancelEnrollment: (enrollmentId: string) =>
       apiRequest<ApiResult<unknown>>('POST', `/sequences/enrollments/${enrollmentId}/cancel`),
+    skipStep: (enrollmentId: string) =>
+      apiRequest<ApiResult<unknown>>('POST', `/sequences/enrollments/${enrollmentId}/skip`),
   },
 
   // AI Compose

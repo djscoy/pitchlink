@@ -12,6 +12,7 @@
  * POST   /api/sequences/enrollments/:id/pause   — Pause enrollment
  * POST   /api/sequences/enrollments/:id/resume  — Resume enrollment
  * POST   /api/sequences/enrollments/:id/cancel  — Cancel enrollment
+ * POST   /api/sequences/enrollments/:id/skip    — Skip current step
  */
 
 import { Router, Response } from 'express';
@@ -213,5 +214,20 @@ sequencesRouter.post('/enrollments/:id/cancel', async (req, res: Response) => {
   } catch (err) {
     console.error('[Sequences] Cancel error:', err);
     res.status(500).json({ error: { code: 'CANCEL_FAILED', message: 'Failed to cancel enrollment' } });
+  }
+});
+
+/**
+ * POST /api/sequences/enrollments/:id/skip
+ */
+sequencesRouter.post('/enrollments/:id/skip', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const enrollment = await sequencesService.skipStep(workspaceId, req.params.id);
+    res.json({ data: enrollment });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to skip step';
+    console.error('[Sequences] Skip error:', err);
+    res.status(500).json({ error: { code: 'SKIP_FAILED', message } });
   }
 });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { TransactionMode, Sequence, SequenceStep } from '@pitchlink/shared';
+import type { TransactionMode, Sequence, SequenceStep, Template } from '@pitchlink/shared';
 
 import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
@@ -304,6 +304,7 @@ function SequencesList({
             <EditSequenceForm
               key={seq.id}
               sequence={seq}
+              mode={mode}
               modeColors={modeColors}
               onSaved={() => { setEditingId(null); onCreated(); }}
               onCancel={() => setEditingId(null)}
@@ -366,21 +367,33 @@ function SequencesList({
 
 function EditSequenceForm({
   sequence,
+  mode,
   modeColors,
   onSaved,
   onCancel,
 }: {
   sequence: Sequence;
+  mode: TransactionMode;
   modeColors: { color: string; bgColor: string };
   onSaved: () => void;
   onCancel: () => void;
 }) {
   const existingSteps = (sequence.steps_json || []) as SequenceStep[];
   const [name, setName] = useState(sequence.name);
-  const [steps, setSteps] = useState<{ delay_days: number; use_ai_generate: boolean }[]>(
-    existingSteps.map((s) => ({ delay_days: s.delay_days, use_ai_generate: s.use_ai_generate ?? true })),
+  const [steps, setSteps] = useState<{ delay_days: number; use_ai_generate: boolean; template_id?: string }[]>(
+    existingSteps.map((s) => ({ delay_days: s.delay_days, use_ai_generate: s.use_ai_generate ?? true, template_id: s.template_id })),
   );
   const [saving, setSaving] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.templates.list(mode) as { data: Template[] };
+        setTemplates(res.data || []);
+      } catch { /* non-fatal */ }
+    })();
+  }, [mode]);
 
   const addStep = () => {
     setSteps([...steps, { delay_days: 5, use_ai_generate: true }]);
@@ -394,6 +407,10 @@ function EditSequenceForm({
     setSteps(steps.map((s, i) => i === idx ? { ...s, delay_days: delay } : s));
   };
 
+  const updateStepTemplate = (idx: number, templateId: string) => {
+    setSteps(steps.map((s, i) => i === idx ? { ...s, template_id: templateId || undefined, use_ai_generate: !templateId } : s));
+  };
+
   const handleSave = async () => {
     if (!name.trim() || steps.length === 0) return;
     setSaving(true);
@@ -403,6 +420,7 @@ function EditSequenceForm({
         position: i,
         delay_days: s.delay_days,
         use_ai_generate: s.use_ai_generate,
+        template_id: s.template_id,
       }));
       await api.sequences.update(sequence.id, { name: name.trim(), steps_json: stepsJson });
       onSaved();
@@ -434,11 +452,11 @@ function EditSequenceForm({
       />
 
       <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', marginBottom: '6px' }}>
-        Steps (AI-generated follow-ups)
+        Steps
       </div>
 
       {steps.map((step, idx) => (
-        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)', width: '50px' }}>
             Step {idx + 1}:
           </span>
@@ -475,6 +493,25 @@ function EditSequenceForm({
               &#10005;
             </button>
           )}
+          <select
+            value={step.template_id || ''}
+            onChange={(e) => updateStepTemplate(idx, e.target.value)}
+            style={{
+              width: '100%',
+              marginLeft: '50px',
+              padding: '3px 4px',
+              fontSize: '11px',
+              border: '1px solid var(--pl-border-secondary)',
+              borderRadius: '4px',
+              backgroundColor: 'var(--pl-bg-primary)',
+              color: 'var(--pl-text-primary)',
+            }}
+          >
+            <option value="">AI Generate</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
         </div>
       ))}
 
@@ -542,10 +579,20 @@ function CreateSequenceForm({
   onCreated: () => void;
 }) {
   const [name, setName] = useState('');
-  const [steps, setSteps] = useState<{ delay_days: number; use_ai_generate: boolean }[]>([
+  const [steps, setSteps] = useState<{ delay_days: number; use_ai_generate: boolean; template_id?: string }[]>([
     { delay_days: 3, use_ai_generate: true },
   ]);
   const [creating, setCreating] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.templates.list(mode) as { data: Template[] };
+        setTemplates(res.data || []);
+      } catch { /* non-fatal */ }
+    })();
+  }, [mode]);
 
   const addStep = () => {
     setSteps([...steps, { delay_days: 5, use_ai_generate: true }]);
@@ -559,6 +606,10 @@ function CreateSequenceForm({
     setSteps(steps.map((s, i) => i === idx ? { ...s, delay_days: delay } : s));
   };
 
+  const updateStepTemplate = (idx: number, templateId: string) => {
+    setSteps(steps.map((s, i) => i === idx ? { ...s, template_id: templateId || undefined, use_ai_generate: !templateId } : s));
+  };
+
   const handleCreate = async () => {
     if (!name.trim() || steps.length === 0) return;
     setCreating(true);
@@ -568,6 +619,7 @@ function CreateSequenceForm({
         position: i,
         delay_days: s.delay_days,
         use_ai_generate: s.use_ai_generate,
+        template_id: s.template_id,
       }));
 
       await api.sequences.create({ name: name.trim(), mode, steps_json: stepsJson });
@@ -600,11 +652,11 @@ function CreateSequenceForm({
       />
 
       <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', marginBottom: '6px' }}>
-        Steps (AI-generated follow-ups)
+        Steps
       </div>
 
       {steps.map((step, idx) => (
-        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)', width: '50px' }}>
             Step {idx + 1}:
           </span>
@@ -641,6 +693,25 @@ function CreateSequenceForm({
               &#10005;
             </button>
           )}
+          <select
+            value={step.template_id || ''}
+            onChange={(e) => updateStepTemplate(idx, e.target.value)}
+            style={{
+              width: '100%',
+              marginLeft: '50px',
+              padding: '3px 4px',
+              fontSize: '11px',
+              border: '1px solid var(--pl-border-secondary)',
+              borderRadius: '4px',
+              backgroundColor: 'var(--pl-bg-primary)',
+              color: 'var(--pl-text-primary)',
+            }}
+          >
+            <option value="">AI Generate</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
         </div>
       ))}
 

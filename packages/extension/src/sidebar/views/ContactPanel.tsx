@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Contact, PipelinePreset, PipelineStage, TransactionMode, IIEResult, Sequence } from '@pitchlink/shared';
+import type { Contact, PipelinePreset, PipelineStage, TransactionMode, IIEResult, Sequence, SequenceStep } from '@pitchlink/shared';
 
 import { useModeColors } from '../hooks/useModeColors';
 import { GmailAdapter, ThreadViewData } from '../../gmail-adapter/GmailAdapter';
@@ -33,6 +33,24 @@ interface CampaignOption {
   pipeline_preset?: PipelinePreset;
 }
 
+function formatFireTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+
+  let relative: string;
+  if (diffHours < 0) relative = 'overdue';
+  else if (diffHours < 1) relative = 'fires soon';
+  else if (diffHours < 24) relative = `fires in ${diffHours}h`;
+  else relative = `fires in ${Math.round(diffHours / 24)}d`;
+
+  const absolute = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    + ', ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  return `${relative} (${absolute})`;
+}
+
 export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [deals, setDeals] = useState<DealInfo[]>([]);
@@ -53,7 +71,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
 
   // Sequence enrollment state
   const [sequences, setSequences] = useState<Sequence[]>([]);
-  const [enrollments, setEnrollments] = useState<{ id: string; sequence: { id: string; name: string }; current_step: number; status: string; pause_reason?: string }[]>([]);
+  const [enrollments, setEnrollments] = useState<{ id: string; sequence: { id: string; name: string; steps_json: SequenceStep[] }; current_step: number; status: string; pause_reason?: string; next_fire_at?: string }[]>([]);
   const [showEnroll, setShowEnroll] = useState(false);
   const [selectedSequenceId, setSelectedSequenceId] = useState('');
   const [enrollingDealId, setEnrollingDealId] = useState('');
@@ -317,6 +335,11 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
 
   const handleCancelEnrollment = async (enrollmentId: string) => {
     await api.sequences.cancelEnrollment(enrollmentId);
+    loadEnrollments();
+  };
+
+  const handleSkipStep = async (enrollmentId: string) => {
+    await api.sequences.skipStep(enrollmentId);
     loadEnrollments();
   };
 
@@ -818,32 +841,48 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
           )}
 
           {/* Active enrollments */}
-          {enrollments.filter((e) => e.status === 'active' || e.status === 'paused').map((enrollment) => (
-            <div key={enrollment.id} className="pl-card" style={{ padding: '8px 10px', marginBottom: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 500 }}>{enrollment.sequence.name}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>
-                    Step {enrollment.current_step + 1} &middot;{' '}
-                    <span style={{ color: enrollment.status === 'paused' ? 'var(--pl-warning, #F59E0B)' : modeColors.color }}>
-                      {enrollment.status}
-                    </span>
-                    {enrollment.pause_reason && ` (${enrollment.pause_reason === 'reply_received' ? 'replied' : enrollment.pause_reason})`}
-                  </div>
+          {enrollments.filter((e) => e.status === 'active' || e.status === 'paused').map((enrollment) => {
+            const totalSteps = enrollment.sequence.steps_json?.length || 0;
+            const stepLabel = `Step ${enrollment.current_step + 1}/${totalSteps}`;
+            const isActive = enrollment.status === 'active';
+            const isPaused = enrollment.status === 'paused';
+
+            return (
+              <div key={enrollment.id} className="pl-card" style={{
+                padding: '10px 12px', marginBottom: '6px',
+                borderLeft: `3px solid ${isActive ? '#22C55E' : 'var(--pl-warning, #F59E0B)'}`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{
+                    display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+                    backgroundColor: isActive ? '#22C55E' : 'var(--pl-warning, #F59E0B)',
+                    flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--pl-text-primary)' }}>
+                    {enrollment.sequence.name}
+                  </span>
                 </div>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {enrollment.status === 'paused' ? (
+
+                <div style={{ fontSize: '11px', color: 'var(--pl-text-secondary)', marginBottom: '8px', paddingLeft: '14px' }}>
+                  {stepLabel}
+                  {isPaused && (
+                    <span style={{ color: 'var(--pl-warning, #F59E0B)' }}>
+                      {' '}&middot; paused{enrollment.pause_reason && ` (${enrollment.pause_reason === 'reply_received' ? 'replied' : enrollment.pause_reason})`}
+                    </span>
+                  )}
+                  {isActive && enrollment.next_fire_at && (
+                    <span> &middot; {formatFireTime(enrollment.next_fire_at)}</span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '4px', paddingLeft: '14px' }}>
+                  {isPaused ? (
                     <button
                       onClick={() => handleResumeEnrollment(enrollment.id)}
                       style={{
-                        padding: '2px 6px',
-                        fontSize: '10px',
-                        fontWeight: 600,
-                        border: 'none',
-                        borderRadius: '4px',
-                        backgroundColor: modeColors.color,
-                        color: 'var(--pl-text-inverse)',
-                        cursor: 'pointer',
+                        padding: '2px 8px', fontSize: '10px', fontWeight: 600, border: 'none',
+                        borderRadius: '4px', backgroundColor: modeColors.color,
+                        color: 'var(--pl-text-inverse)', cursor: 'pointer',
                       }}
                     >
                       Resume
@@ -852,36 +891,40 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                     <button
                       onClick={() => handlePauseEnrollment(enrollment.id)}
                       style={{
-                        padding: '2px 6px',
-                        fontSize: '10px',
-                        border: '1px solid var(--pl-border-secondary)',
-                        borderRadius: '4px',
-                        backgroundColor: 'transparent',
-                        color: 'var(--pl-text-secondary)',
-                        cursor: 'pointer',
+                        padding: '2px 8px', fontSize: '10px',
+                        border: '1px solid var(--pl-border-secondary)', borderRadius: '4px',
+                        backgroundColor: 'transparent', color: 'var(--pl-text-secondary)', cursor: 'pointer',
                       }}
                     >
                       Pause
                     </button>
                   )}
+                  {isActive && (
+                    <button
+                      onClick={() => handleSkipStep(enrollment.id)}
+                      style={{
+                        padding: '2px 8px', fontSize: '10px',
+                        border: '1px solid var(--pl-border-secondary)', borderRadius: '4px',
+                        backgroundColor: 'transparent', color: 'var(--pl-text-secondary)', cursor: 'pointer',
+                      }}
+                    >
+                      Skip Step
+                    </button>
+                  )}
                   <button
                     onClick={() => handleCancelEnrollment(enrollment.id)}
                     style={{
-                      padding: '2px 6px',
-                      fontSize: '10px',
-                      border: '1px solid var(--pl-border-secondary)',
-                      borderRadius: '4px',
-                      backgroundColor: 'transparent',
-                      color: 'var(--pl-text-tertiary)',
-                      cursor: 'pointer',
+                      padding: '2px 8px', fontSize: '10px',
+                      border: '1px solid var(--pl-border-secondary)', borderRadius: '4px',
+                      backgroundColor: 'transparent', color: 'var(--pl-text-tertiary)', cursor: 'pointer',
                     }}
                   >
                     Cancel
                   </button>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {enrollments.length === 0 && !showEnroll && (
             <div style={{ fontSize: '12px', color: 'var(--pl-text-tertiary)', fontStyle: 'italic' }}>
