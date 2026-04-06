@@ -47,17 +47,21 @@ export function DiscoveryView({ mode }: DiscoveryViewProps) {
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [showCampaignPicker, setShowCampaignPicker] = useState<string | null>(null);
 
+  // Track which mode campaigns were loaded for
+  const [campaignsMode, setCampaignsMode] = useState<string | null>(null);
+
   const loadCampaigns = useCallback(async () => {
-    if (campaigns.length > 0) return;
+    if (campaigns.length > 0 && campaignsMode === mode) return;
     try {
       const result = await api.campaigns.list({ mode, status: 'active' }) as {
         data: { campaigns: { id: string; name: string }[] };
       };
       setCampaigns(result.data?.campaigns || []);
+      setCampaignsMode(mode);
     } catch {
       // Silent fail
     }
-  }, [mode, campaigns.length]);
+  }, [mode, campaigns.length, campaignsMode]);
 
   const handleDomainSearch = async () => {
     if (!domainQuery.trim()) return;
@@ -404,6 +408,7 @@ export function DiscoveryView({ mode }: DiscoveryViewProps) {
                     <button
                       onClick={() => {
                         loadCampaigns();
+                        setSelectedCampaignId('');
                         setShowCampaignPicker(isPickingCampaign ? null : prospect.email);
                       }}
                       disabled={isAdding}

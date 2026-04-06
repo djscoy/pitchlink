@@ -229,10 +229,9 @@ const dataForSEOProvider: EnrichmentProvider = {
       if (!result) return null;
 
       return {
-        domain_rating: result.rank ? Math.round(result.rank / 10) : undefined, // Normalize to 0-100 scale
+        domain_rating: result.rank !== undefined ? Math.min(100, Math.round(Math.log10(Math.max(1, result.rank)) * 15)) : undefined,
         backlinks: result.backlinks || undefined,
         referring_domains: result.referring_domains || undefined,
-        monthly_traffic: result.estimated_paid_traffic_cost || undefined,
         spam_score: result.spam_score || undefined,
         broken_backlinks: result.broken_backlinks || undefined,
         referring_ips: result.referring_ips || undefined,

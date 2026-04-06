@@ -32,6 +32,7 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
   const [loading, setLoading] = useState(true);
   const [bulkEnriching, setBulkEnriching] = useState(false);
   const [bulkEnrichResult, setBulkEnrichResult] = useState<{ enriched: number; failed: number; total: number } | null>(null);
+  const [bulkEnrichError, setBulkEnrichError] = useState(false);
 
   const modeColors = useModeColors(mode);
 
@@ -156,11 +157,12 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
           onClick={async () => {
             setBulkEnriching(true);
             setBulkEnrichResult(null);
+            setBulkEnrichError(false);
             try {
               const res = await api.contacts.bulkEnrich(activeCampaignId!) as { data: { enriched: number; failed: number; total: number } };
               setBulkEnrichResult(res.data);
             } catch {
-              setBulkEnrichResult({ enriched: 0, failed: 0, total: 0 });
+              setBulkEnrichError(true);
             } finally {
               setBulkEnriching(false);
             }
@@ -182,6 +184,11 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
           {bulkEnriching ? 'Enriching...' : 'Enrich All'}
         </button>
       </div>
+      {bulkEnrichError && (
+        <div style={{ fontSize: '11px', color: 'var(--pl-error)', marginBottom: '8px', padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--pl-bg-secondary)' }}>
+          Enrichment failed. Check that providers are configured.
+        </div>
+      )}
       {bulkEnrichResult && (
         <div style={{ fontSize: '11px', color: 'var(--pl-text-secondary)', marginBottom: '8px', padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--pl-bg-secondary)' }}>
           Enriched {bulkEnrichResult.enriched}/{bulkEnrichResult.total} contacts

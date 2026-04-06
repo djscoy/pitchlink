@@ -143,11 +143,33 @@ contactsRouter.post('/:id/enrich', async (req, res: Response) => {
 });
 
 /**
+ * GET /api/contacts/campaign/:campaignId/export
+ * Export contacts for a campaign as CSV
+ * NOTE: Must be before /:id routes to avoid Express matching "campaign" as :id
+ */
+contactsRouter.get('/campaign/:campaignId/export', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const csv = await contactsService.exportCampaignCSV(workspaceId, req.params.campaignId);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="contacts-${req.params.campaignId}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    console.error('[Contacts] Export error:', err);
+    res.status(500).json({ error: { code: 'EXPORT_FAILED', message: 'Failed to export contacts' } });
+  }
+});
+
+/**
  * GET /api/contacts/:id/enrichment
  * Get cached enrichment data for a contact
  */
 contactsRouter.get('/:id/enrichment', async (req, res: Response) => {
   try {
+    const { workspaceId } = getAuth(req);
+    // Verify the contact belongs to this workspace before returning enrichment data
+    await contactsService.getById(workspaceId, req.params.id);
     const summary = await enrichmentService.getSummary(req.params.id);
     const cached = await enrichmentService.getCached(req.params.id);
     res.json({ data: { summary, providers: cached.map((c) => ({ provider: c.provider, fetched_at: c.fetched_at, expires_at: c.expires_at })) } });
@@ -250,20 +272,4 @@ contactsRouter.delete('/:id', async (req, res: Response) => {
   }
 });
 
-/**
- * GET /api/contacts/campaign/:campaignId/export
- * Export contacts for a campaign as CSV
- */
-contactsRouter.get('/campaign/:campaignId/export', async (req, res: Response) => {
-  try {
-    const { workspaceId } = getAuth(req);
-    const csv = await contactsService.exportCampaignCSV(workspaceId, req.params.campaignId);
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="contacts-${req.params.campaignId}.csv"`);
-    res.send(csv);
-  } catch (err) {
-    console.error('[Contacts] Export error:', err);
-    res.status(500).json({ error: { code: 'EXPORT_FAILED', message: 'Failed to export contacts' } });
-  }
-});

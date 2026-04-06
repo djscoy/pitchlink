@@ -120,7 +120,12 @@ export const forwardDetectionService = {
     if (bodyText) {
       const bodyResult = this.parseForwardBody(bodyText);
       if (bodyResult) {
-        return { iieResult: { ...bodyResult, forwarding_email: senderEmail }, message };
+        // Safety: never return user's own email as "original sender"
+        if (bodyResult.original_sender_email && ownEmails.has(bodyResult.original_sender_email.toLowerCase())) {
+          console.warn(`[IIE] Layer 2 skipped — resolved to user's own email: ${bodyResult.original_sender_email}`);
+        } else {
+          return { iieResult: { ...bodyResult, forwarding_email: senderEmail }, message };
+        }
       }
     }
 
@@ -138,7 +143,12 @@ export const forwardDetectionService = {
 
         const aiResult = await this.inferForwardAI(bodyText, headersSummary);
         if (aiResult) {
-          return { iieResult: { ...aiResult, forwarding_email: senderEmail }, message };
+          // Safety: never return user's own email as "original sender"
+          if (aiResult.original_sender_email && ownEmails.has(aiResult.original_sender_email.toLowerCase())) {
+            console.warn(`[IIE] Layer 3 skipped — resolved to user's own email: ${aiResult.original_sender_email}`);
+          } else {
+            return { iieResult: { ...aiResult, forwarding_email: senderEmail }, message };
+          }
         }
       } catch (err) {
         console.error('[IIE] Layer 3 AI inference failed:', err);
