@@ -13,6 +13,7 @@ import { NudgesView } from './views/NudgesView';
 import { DiscoveryView } from './views/DiscoveryView';
 import { SourceRegistryView } from './views/SourceRegistryView';
 import { MyEmailsView } from './views/MyEmailsView';
+import { AutoReplySettingsView } from './views/AutoReplySettingsView';
 import { MODE_CONFIG, TRANSACTION_MODES, SIDEBAR, APP_CONFIG } from '@pitchlink/shared';
 import type { TransactionMode } from '@pitchlink/shared';
 import { useModeColors } from './hooks/useModeColors';
@@ -318,6 +319,8 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                 &larr; Back
               </button>
             </div>
+            <AutoReplySettingsView />
+            <div style={{ margin: '16px 0', borderTop: '1px solid var(--pl-border-secondary)' }} />
             <MyEmailsView />
             <div style={{ margin: '16px 0', borderTop: '1px solid var(--pl-border-secondary)' }} />
             <SourceRegistryView />

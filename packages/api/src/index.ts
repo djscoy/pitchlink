@@ -21,7 +21,9 @@ import { composeRouter } from './routes/compose';
 import { sequencesRouter } from './routes/sequences';
 import { repliesRouter } from './routes/replies';
 import { discoveryRouter } from './routes/discovery';
+import { autoReplyRouter } from './routes/auto-reply';
 import { sequenceExecutorService } from './services/sequence-executor';
+import { autoReplyExecutorService } from './services/auto-reply-executor';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -76,6 +78,7 @@ app.use('/api/compose', composeRouter);
 app.use('/api/sequences', sequencesRouter);
 app.use('/api/replies', repliesRouter);
 app.use('/api/discovery', discoveryRouter);
+app.use('/api/auto-reply', autoReplyRouter);
 
 // ============================================================
 // Error handler
@@ -108,6 +111,9 @@ app.listen(PORT, () => {
 
   // Start the sequence executor (fires scheduled nudge steps every 5 minutes)
   sequenceExecutorService.start();
+
+  // Start the auto-reply executor (processes auto-reply queue every 60 seconds)
+  autoReplyExecutorService.start();
 });
 
 export default app;

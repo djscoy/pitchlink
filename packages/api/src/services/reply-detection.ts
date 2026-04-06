@@ -3,8 +3,9 @@ import { gmailWatchService } from './gmail-watch';
 import { dealsService } from './deals';
 import { forwardDetectionService } from './forward-detection';
 import { sourceRegistryService } from './source-registry';
-import { extractEmail } from '../utils/email';
+import { extractEmail, extractName } from '../utils/email';
 import { sequencesService } from './sequences';
+import { autoReplyService } from './auto-reply';
 import type { IIEResult } from '@pitchlink/shared';
 
 /**
@@ -141,6 +142,42 @@ export const replyDetectionService = {
 
       // Not a forward — proceed with standard reply detection
       await this.checkForReply(workspaceId, senderEmail, messageId);
+
+      // Check auto-reply for new inbound messages from unknown contacts
+      try {
+        const headers = message.payload?.headers || [];
+        const subjectHeader = headers.find(
+          (h: { name: string }) => h.name.toLowerCase() === 'subject',
+        )?.value || '';
+        const toHeader = headers.find(
+          (h: { name: string }) => h.name.toLowerCase() === 'to',
+        )?.value || '';
+        const autoSubmitted = headers.find(
+          (h: { name: string }) => h.name.toLowerCase() === 'auto-submitted',
+        )?.value;
+
+        // Skip auto-generated emails (prevent loops)
+        if (autoSubmitted && autoSubmitted !== 'no') {
+          return;
+        }
+
+        const bodyText = forwardDetectionService.extractBodyText(message.payload) || '';
+        const senderName = extractName(fromHeader);
+        const toEmail = extractEmail(toHeader) || '';
+
+        await autoReplyService.checkAndQueue(workspaceId, accessToken, {
+          messageId,
+          threadId: message.threadId || '',
+          senderEmail,
+          senderName: senderName || undefined,
+          subject: subjectHeader,
+          bodyText,
+          toEmail,
+        });
+      } catch (autoReplyErr) {
+        // Non-fatal — don't break reply detection if auto-reply fails
+        console.error('[ReplyDetection] Auto-reply check failed:', autoReplyErr);
+      }
     } catch (err) {
       console.error(`[ReplyDetection] Error checking message ${messageId}:`, err);
     }

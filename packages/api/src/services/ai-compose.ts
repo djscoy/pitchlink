@@ -158,4 +158,57 @@ Return ONLY valid JSON with no other text:
       return null;
     }
   },
+
+  /**
+   * Send an email directly via Gmail API (not as a draft).
+   * Used by auto-reply in auto_send mode.
+   */
+  async sendEmail(
+    accessToken: string,
+    toEmail: string,
+    subject: string,
+    body: string,
+    threadId?: string,
+  ): Promise<string | null> {
+    try {
+      const rawMessage = [
+        `To: ${toEmail}`,
+        `Subject: ${subject}`,
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        body,
+      ].join('\r\n');
+
+      const encoded = Buffer.from(rawMessage)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const messagePayload: Record<string, unknown> = { raw: encoded };
+      if (threadId) {
+        messagePayload.threadId = threadId;
+      }
+
+      const response = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messagePayload),
+      });
+
+      if (!response.ok) {
+        console.error(`[AICompose] Failed to send email: ${response.status}`);
+        return null;
+      }
+
+      const result = await response.json();
+      return result.id;
+    } catch (err) {
+      console.error('[AICompose] Error sending email:', err);
+      return null;
+    }
+  },
 };

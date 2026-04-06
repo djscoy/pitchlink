@@ -336,6 +336,45 @@ export interface OnboardingScanProgress {
   error_message?: string;
 }
 
+// --- Auto-Reply ---
+
+export interface AutoReplyRule {
+  id: string;
+  workspace_id: string;
+  campaign_id: string | null;
+  template_id: string;
+  is_enabled: boolean;
+  mode: 'auto_send' | 'draft_hold';
+  delay_minutes: number;
+  match_type: 'ai_classify' | 'all_new';
+  receiving_emails: string[];
+  max_per_hour: number;
+  created_at: string;
+  updated_at: string;
+  template?: { id: string; name: string };
+}
+
+export type AutoReplyQueueStatus = 'pending' | 'sent' | 'drafted' | 'skipped' | 'failed';
+
+export interface AutoReplyQueueItem {
+  id: string;
+  workspace_id: string;
+  rule_id: string;
+  gmail_message_id: string;
+  gmail_thread_id: string;
+  sender_email: string;
+  sender_name: string | null;
+  resolved_subject: string;
+  resolved_body: string;
+  status: AutoReplyQueueStatus;
+  classification: string | null;
+  scheduled_at: string;
+  sent_at: string | null;
+  draft_id: string | null;
+  skip_reason: string | null;
+  created_at: string;
+}
+
 // --- API Response Types ---
 
 export interface ApiResponse<T> {

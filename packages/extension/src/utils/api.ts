@@ -309,6 +309,30 @@ export const api = {
       }>>('POST', '/discovery/people', params),
   },
 
+  // Auto-Reply
+  autoReply: {
+    listRules: () =>
+      apiRequest<ApiResult<unknown>>('GET', '/auto-reply/rules'),
+    createRule: (data: {
+      template_id: string;
+      campaign_id?: string;
+      mode?: string;
+      delay_minutes?: number;
+      match_type?: string;
+      receiving_emails?: string[];
+    }) => apiRequest<ApiResult<unknown>>('POST', '/auto-reply/rules', data),
+    updateRule: (id: string, data: Record<string, unknown>) =>
+      apiRequest<ApiResult<unknown>>('PATCH', `/auto-reply/rules/${id}`, data),
+    deleteRule: (id: string) =>
+      apiRequest<void>('DELETE', `/auto-reply/rules/${id}`),
+    listQueue: (status?: string) => {
+      const qs = status ? `?status=${status}` : '';
+      return apiRequest<ApiResult<unknown>>('GET', `/auto-reply/queue${qs}`);
+    },
+    skipQueueItem: (id: string) =>
+      apiRequest<ApiResult<unknown>>('POST', `/auto-reply/queue/${id}/skip`),
+  },
+
   // Auth
   auth: {
     renewWatches: () =>
