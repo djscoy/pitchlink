@@ -36,6 +36,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showBulkAssign, setShowBulkAssign] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'auto-reply' | 'my-emails' | 'source-registry'>('auto-reply');
   const [replyCount, setReplyCount] = useState(0);
 
   // Check onboarding status on mount
@@ -319,11 +320,35 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                 &larr; Back
               </button>
             </div>
-            <AutoReplySettingsView />
-            <div style={{ margin: '16px 0', borderTop: '1px solid var(--pl-border-secondary)' }} />
-            <MyEmailsView />
-            <div style={{ margin: '16px 0', borderTop: '1px solid var(--pl-border-secondary)' }} />
-            <SourceRegistryView />
+            {/* Settings sub-tabs */}
+            <div style={{ display: 'flex', gap: '2px', marginBottom: '10px' }}>
+              {([
+                { id: 'auto-reply' as const, label: 'Auto-Reply' },
+                { id: 'my-emails' as const, label: 'My Emails' },
+                { id: 'source-registry' as const, label: 'Forwarding' },
+              ]).map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSettingsTab(tab.id)}
+                  style={{
+                    flex: 1,
+                    padding: '5px 4px',
+                    fontSize: '10px',
+                    fontWeight: settingsTab === tab.id ? 600 : 400,
+                    border: settingsTab === tab.id ? '1px solid var(--pl-text-tertiary)' : '1px solid var(--pl-border-secondary)',
+                    borderRadius: '4px',
+                    backgroundColor: settingsTab === tab.id ? 'var(--pl-bg-secondary)' : 'transparent',
+                    color: settingsTab === tab.id ? 'var(--pl-text-primary)' : 'var(--pl-text-tertiary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {settingsTab === 'auto-reply' && <AutoReplySettingsView />}
+            {settingsTab === 'my-emails' && <MyEmailsView />}
+            {settingsTab === 'source-registry' && <SourceRegistryView />}
           </ErrorBoundary>
         ) : showOnboarding && onboardingChecked ? (
           <ErrorBoundary section="onboarding-view">
