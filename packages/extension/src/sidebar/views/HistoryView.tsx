@@ -115,11 +115,17 @@ export function HistoryView({ mode }: HistoryViewProps) {
         return (
           <div
             key={activity.id}
+            onClick={() => {
+              if (contact?.email) {
+                window.location.hash = `#search/from:${contact.email}+OR+to:${contact.email}`;
+              }
+            }}
             style={{
               display: 'flex',
               gap: '8px',
               padding: '8px 0',
               borderBottom: '1px solid var(--pl-border-primary)',
+              cursor: contact?.email ? 'pointer' : 'default',
             }}
           >
             <div style={{ fontSize: '14px', lineHeight: '20px', flexShrink: 0 }}>
