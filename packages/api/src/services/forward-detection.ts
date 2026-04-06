@@ -54,10 +54,12 @@ const YAHOO_FORWARD_RE =
   /--- Forwarded Message ---[\s\S]*?From:\s*(.+?)(?:\n|$)/i;
 
 // "-------- Original Message --------" (common in many clients)
+// Handles both multi-line and single-line forward headers
 const ORIGINAL_MSG_RE =
-  /-{3,}\s*Original Message\s*-{3,}[\s\S]*?(?:From|Subject|Date):\s*.*[\s\S]*?From:\s*(.+?)(?:\n|$)/i;
+  /-{3,}\s*Original Message\s*-{3,}[\s\S]*?From:\s*([^\n]+)/i;
 
 // Generic "Fwd:" / "Fw:" in a From-like line within the body
+// Matches From: at start of line or after "Original Message" separator on same line
 const GENERIC_FWD_FROM_RE =
   /(?:^|\n)\s*(?:>{1,2}\s*)?From:\s*(.+?)(?:\n|$)/i;
 
