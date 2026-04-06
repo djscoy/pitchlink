@@ -174,6 +174,82 @@ async function apolloPeopleSearch(params: {
   }
 }
 
+// --- Vibe (Explorium) Discovery ---
+
+async function vibeDiscoverByDomain(
+  domain: string,
+  limit: number = 10,
+): Promise<DomainSearchResult | null> {
+  const apiKey = process.env.EXPLORIUM_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    // First match the business
+    const matchRes = await fetch('https://api.explorium.ai/v1/businesses/match', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ businesses: [{ domain }] }),
+    });
+
+    if (!matchRes.ok) return null;
+    const matchJson = await matchRes.json();
+    const businessId = matchJson.data?.[0]?.business_id;
+    const businessName = matchJson.data?.[0]?.name;
+
+    if (!businessId) return null;
+
+    // Fetch prospects at this business
+    const fetchRes = await fetch('https://api.explorium.ai/v1/prospects/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        filters: { business_id: { values: [businessId] }, has_email: true },
+        limit,
+      }),
+    });
+
+    if (!fetchRes.ok) return null;
+    const fetchJson = await fetchRes.json();
+    const prospects: DiscoveryProspect[] = (fetchJson.data || []).map(
+      (p: {
+        email?: string;
+        first_name?: string;
+        last_name?: string;
+        full_name?: string;
+        job_title?: string;
+        company_name?: string;
+        linkedin_url?: string;
+      }) => ({
+        email: p.email || '',
+        first_name: p.first_name || undefined,
+        last_name: p.last_name || undefined,
+        full_name: p.full_name || undefined,
+        job_title: p.job_title || undefined,
+        company_name: p.company_name || businessName || undefined,
+        company_domain: domain,
+        linkedin_url: p.linkedin_url || undefined,
+        source: 'vibe',
+      }),
+    ).filter((p: DiscoveryProspect) => p.email);
+
+    return {
+      prospects,
+      total: fetchJson.total || prospects.length,
+      domain,
+      organization: businessName || undefined,
+    };
+  } catch (err) {
+    console.error('[Discovery:Vibe] Error:', err);
+    return null;
+  }
+}
+
 // --- Discovery Service ---
 
 export const discoveryService = {
@@ -182,6 +258,7 @@ export const discoveryService = {
    */
   getAvailableProviders(): string[] {
     const available: string[] = [];
+    if (process.env.EXPLORIUM_API_KEY) available.push('vibe');
     if (process.env.HUNTER_API_KEY) available.push('hunter');
     if (process.env.APOLLO_API_KEY) available.push('apollo');
     return available;
@@ -194,6 +271,11 @@ export const discoveryService = {
     domain: string,
     options?: { limit?: number; offset?: number },
   ): Promise<DomainSearchResult> {
+    // Try Vibe (Explorium) first — primary provider
+    const vibeResult = await vibeDiscoverByDomain(domain, options?.limit || 10);
+    if (vibeResult && vibeResult.prospects.length > 0) return vibeResult;
+
+    // Fallback: Hunter
     const hunterResult = await hunterDomainSearch(
       domain,
       options?.limit || 10,
@@ -202,7 +284,7 @@ export const discoveryService = {
 
     if (hunterResult) return hunterResult;
 
-    // Fallback: try Apollo domain search
+    // Fallback: Apollo domain search
     const apolloResult = await apolloPeopleSearch({
       q_organization_domains: [domain],
       limit: options?.limit || 10,

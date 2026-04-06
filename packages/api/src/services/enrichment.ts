@@ -243,9 +243,100 @@ const dataForSEOProvider: EnrichmentProvider = {
   },
 };
 
-// --- Provider Registry ---
+// --- Vibe Prospecting (Explorium) Provider ---
 
-const providers: EnrichmentProvider[] = [hunterProvider, apolloProvider, dataForSEOProvider];
+const vibeProvider: EnrichmentProvider = {
+  name: 'vibe',
+
+  isConfigured() {
+    return !!process.env.EXPLORIUM_API_KEY;
+  },
+
+  async enrich(email: string): Promise<EnrichmentResult | null> {
+    const apiKey = process.env.EXPLORIUM_API_KEY;
+    if (!apiKey) return null;
+
+    try {
+      // Step 1: Match prospect by email
+      const matchRes = await fetch('https://api.explorium.ai/v1/prospects/match', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          prospects: [{ email }],
+        }),
+      });
+
+      if (!matchRes.ok) {
+        console.warn(`[Enrichment:Vibe] Match API error ${matchRes.status} for ${email}`);
+        return null;
+      }
+
+      const matchJson = await matchRes.json();
+      const prospectId = matchJson.data?.[0]?.prospect_id;
+
+      if (!prospectId) {
+        console.log(`[Enrichment:Vibe] No match for ${email}`);
+        return null;
+      }
+
+      // Step 2: Enrich the matched prospect (profile + contacts)
+      const enrichRes = await fetch('https://api.explorium.ai/v1/prospects/enrich', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          prospect_ids: [prospectId],
+          enrichments: ['profiles', 'contacts'],
+        }),
+      });
+
+      if (!enrichRes.ok) {
+        console.warn(`[Enrichment:Vibe] Enrich API error ${enrichRes.status}`);
+        return null;
+      }
+
+      const enrichJson = await enrichRes.json();
+      const prospect = enrichJson.data?.[0];
+
+      if (!prospect) return null;
+
+      return {
+        full_name: prospect.full_name || undefined,
+        first_name: prospect.first_name || undefined,
+        last_name: prospect.last_name || undefined,
+        job_title: prospect.job_title || undefined,
+        company_name: prospect.company_name || undefined,
+        company_domain: prospect.company_website || undefined,
+        company_industry: prospect.industry || undefined,
+        company_size: prospect.company_size || undefined,
+        linkedin_url: prospect.linkedin_url || undefined,
+        phone: prospect.phone || undefined,
+        city: prospect.city || undefined,
+        country: prospect.country || undefined,
+        seniority: prospect.seniority || undefined,
+        department: prospect.department || undefined,
+        gender: prospect.gender || undefined,
+        age_group: prospect.age_group || undefined,
+        skills: prospect.skills || undefined,
+        company_linkedin: prospect.company_linkedin || undefined,
+        company_revenue: prospect.company_revenue || undefined,
+      };
+    } catch (err) {
+      console.error('[Enrichment:Vibe] Error:', err);
+      return null;
+    }
+  },
+};
+
+// --- Provider Registry ---
+// Vibe (Explorium) is the primary provider — runs first, others fill gaps
+
+const providers: EnrichmentProvider[] = [vibeProvider, hunterProvider, apolloProvider, dataForSEOProvider];
 
 // --- Enrichment Service ---
 
