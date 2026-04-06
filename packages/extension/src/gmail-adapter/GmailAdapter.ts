@@ -169,7 +169,7 @@ export class GmailAdapter {
     //    (the user sent the initial email, so the To: address is the contact)
     for (const mv of messageViews) {
       try {
-        const recipients = mv.getRecipients?.() || [];
+        const recipients = mv.getRecipientsFull?.() || mv.getRecipients?.() || [];
         for (const recipient of recipients) {
           if (recipient?.emailAddress && !this.userEmails.has(recipient.emailAddress.toLowerCase())) {
             return recipient;
