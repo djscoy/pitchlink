@@ -33,12 +33,14 @@ export function ComposePanel({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [generated, setGenerated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const modeColors = useModeColors(mode);
 
   const handleGenerate = async () => {
     setGenerating(true);
     setSaved(false);
+    setError(null);
     try {
       const res = await api.compose.generate({
         contactEmail,
@@ -56,6 +58,7 @@ export function ComposePanel({
       setGenerated(true);
     } catch (err) {
       console.error('[Compose] Generation failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate draft');
     } finally {
       setGenerating(false);
     }
@@ -156,6 +159,21 @@ export function ComposePanel({
         >
           {generating ? 'Generating...' : generated ? 'Regenerate' : 'Generate Draft'}
         </button>
+
+        {/* Error display */}
+        {error && (
+          <div style={{
+            marginTop: '8px',
+            padding: '8px',
+            fontSize: '12px',
+            color: '#EF4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderRadius: '4px',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+          }}>
+            {error}
+          </div>
+        )}
 
         {/* Generated output */}
         {generated && (

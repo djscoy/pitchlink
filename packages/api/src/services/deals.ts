@@ -14,14 +14,27 @@ export const dealsService = {
       .from('deals')
       .select(`
         *,
-        contact:contacts(id, email, name, domain, tags, enrichment_status)
+        contact:contacts(id, email, name, domain, tags, enrichment_status),
+        activities:deal_activities(created_at, type)
       `)
       .eq('workspace_id', workspaceId)
       .eq('campaign_id', campaignId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data;
+
+    // Compute last_reply_at from activities
+    return (data || []).map((deal: any) => {
+      const replyActivities = (deal.activities || [])
+        .filter((a: any) => a.type === 'email_received')
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      return {
+        ...deal,
+        last_reply_at: replyActivities.length > 0 ? replyActivities[0].created_at : null,
+        activities: undefined, // Don't send raw activities to client
+      };
+    });
   },
 
   async listByContact(workspaceId: string, contactId: string) {

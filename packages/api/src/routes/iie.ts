@@ -77,10 +77,26 @@ iieRouter.post('/analyze', async (req, res: Response) => {
       });
     }
 
+    // Collect user's own email addresses to prevent self-resolution
+    const { data: emailAccounts } = await supabaseAdmin
+      .from('email_accounts')
+      .select('email')
+      .eq('workspace_id', workspaceId);
+    const userEmails = (emailAccounts || []).map((a: { email: string }) => a.email);
+
+    // Also add the authenticated user's email
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .maybeSingle();
+    if (userData?.email) userEmails.push(userData.email);
+
     const { iieResult } = await forwardDetectionService.detectForward(
       workspaceId,
       accessToken,
       messageId,
+      userEmails,
     );
 
     res.json({ data: iieResult });

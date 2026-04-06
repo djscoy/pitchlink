@@ -19,6 +19,8 @@ import { iieRouter } from './routes/iie';
 import { onboardingRouter } from './routes/onboarding';
 import { composeRouter } from './routes/compose';
 import { sequencesRouter } from './routes/sequences';
+import { repliesRouter } from './routes/replies';
+import { discoveryRouter } from './routes/discovery';
 import { sequenceExecutorService } from './services/sequence-executor';
 
 const app = express();
@@ -72,6 +74,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/iie', iieRouter);
 app.use('/api/compose', composeRouter);
 app.use('/api/sequences', sequencesRouter);
+app.use('/api/replies', repliesRouter);
+app.use('/api/discovery', discoveryRouter);
 
 // ============================================================
 // Error handler

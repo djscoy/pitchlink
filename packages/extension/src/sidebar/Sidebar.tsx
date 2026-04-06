@@ -10,6 +10,7 @@ import { TemplatePanel } from './views/TemplatePanel';
 import { OnboardingView } from './views/OnboardingView';
 import { BulkAssignView } from './views/BulkAssignView';
 import { NudgesView } from './views/NudgesView';
+import { DiscoveryView } from './views/DiscoveryView';
 import { SourceRegistryView } from './views/SourceRegistryView';
 import { MODE_CONFIG, TRANSACTION_MODES, SIDEBAR, APP_CONFIG } from '@pitchlink/shared';
 import type { TransactionMode } from '@pitchlink/shared';
@@ -21,7 +22,7 @@ interface SidebarProps {
   gmailAdapter: GmailAdapter;
 }
 
-type SidebarTab = 'pipeline' | 'templates' | 'nudges' | 'history';
+type SidebarTab = 'pipeline' | 'templates' | 'nudges' | 'history' | 'discover';
 
 export function Sidebar({ gmailAdapter }: SidebarProps) {
   const { resolvedTheme, setTheme } = useTheme();
@@ -33,6 +34,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showBulkAssign, setShowBulkAssign] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [replyCount, setReplyCount] = useState(0);
 
   // Check onboarding status on mount
   useEffect(() => {
@@ -50,6 +52,21 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
     })();
   }, []);
 
+  // Poll for recent reply count (every 60s)
+  useEffect(() => {
+    const fetchReplyCount = async () => {
+      try {
+        const result = await api.replies.count() as { data: { count: number } };
+        setReplyCount(result.data.count);
+      } catch {
+        // Silent fail — reply count is non-critical
+      }
+    };
+    fetchReplyCount();
+    const interval = setInterval(fetchReplyCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Listen for thread view changes — auto-dismiss settings when a thread opens
   useEffect(() => {
     const unsubscribe = gmailAdapter.onThreadView((data) => {
@@ -62,12 +79,13 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const modeColors = useModeColors(activeMode);
 
   // Keyboard shortcuts
-  const TABS: SidebarTab[] = ['pipeline', 'templates', 'nudges', 'history'];
+  const TABS: SidebarTab[] = ['pipeline', 'templates', 'nudges', 'history', 'discover'];
   const shortcuts = useMemo(() => ({
     'alt+1': () => setActiveTab('pipeline'),
     'alt+2': () => setActiveTab('templates'),
     'alt+3': () => setActiveTab('nudges'),
     'alt+4': () => setActiveTab('history'),
+    'alt+5': () => setActiveTab('discover'),
     'alt+b': () => { setActiveMode('buy'); setActiveCampaignId(null); },
     'alt+s': () => { setActiveMode('sell'); setActiveCampaignId(null); },
     'alt+x': () => { setActiveMode('exchange'); setActiveCampaignId(null); },
@@ -144,6 +162,48 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
 
         {/* Right controls */}
         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+          {/* Reply notification */}
+          {replyCount > 0 && (
+            <button
+              onClick={() => {
+                setActiveTab('history');
+                setReplyCount(0);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '13px',
+                padding: '2px 4px',
+                color: 'var(--pl-info)',
+                position: 'relative',
+              }}
+              title={`${replyCount} new repl${replyCount === 1 ? 'y' : 'ies'} in the last 24h`}
+            >
+              &#8617;
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  right: '-2px',
+                  fontSize: '8px',
+                  fontWeight: 700,
+                  backgroundColor: 'var(--pl-info)',
+                  color: 'var(--pl-text-inverse)',
+                  borderRadius: '50%',
+                  width: '14px',
+                  height: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1,
+                }}
+              >
+                {replyCount > 9 ? '9+' : replyCount}
+              </span>
+            </button>
+          )}
+
           {/* Settings */}
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -296,6 +356,11 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
             {activeTab === 'history' && (
               <ErrorBoundary section="history-view">
                 <HistoryView mode={activeMode} />
+              </ErrorBoundary>
+            )}
+            {activeTab === 'discover' && (
+              <ErrorBoundary section="discovery-view">
+                <DiscoveryView mode={activeMode} />
               </ErrorBoundary>
             )}
           </>

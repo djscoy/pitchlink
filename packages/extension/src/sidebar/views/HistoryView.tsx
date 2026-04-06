@@ -35,6 +35,8 @@ const ACTIVITY_CONFIG: Record<string, { icon: string; label: string }> = {
   sequence_completed: { icon: '\u2705', label: 'Sequence completed' },
   tag_added: { icon: '\u{1F3F7}\uFE0F', label: 'Tag added' },
   tag_removed: { icon: '\u274C', label: 'Tag removed' },
+  forward_detected: { icon: '\u{1F4E8}', label: 'Forward detected' },
+  deal_created: { icon: '\u{1F4C4}', label: 'Deal created' },
 };
 
 export function HistoryView({ mode }: HistoryViewProps) {
@@ -193,6 +195,13 @@ function formatActivityDescription(activity: ActivityItem): string {
       return 'Sequence completed';
     case 'contact_enriched':
       return data.providers ? `Via ${data.providers}` : 'Contact enriched';
+    case 'forward_detected': {
+      const original = data.original_sender as string;
+      const forwarding = data.forwarding_email as string;
+      return original ? `${forwarding} → ${original}` : 'Forward detected';
+    }
+    case 'deal_created':
+      return data.reason === 'bulk_assign' ? 'Bulk assigned' : 'Deal created';
     default:
       return activity.type.replace(/_/g, ' ');
   }

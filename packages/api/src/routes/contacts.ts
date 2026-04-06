@@ -102,6 +102,29 @@ contactsRouter.get('/enrichment/providers', async (_req, res: Response) => {
 });
 
 /**
+ * POST /api/contacts/bulk-enrich
+ * Bulk enrich all contacts in a campaign
+ */
+contactsRouter.post('/bulk-enrich', async (req, res: Response) => {
+  try {
+    const { workspaceId } = getAuth(req);
+    const { campaign_id } = req.body;
+
+    if (!campaign_id) {
+      return res.status(400).json({
+        error: { code: 'MISSING_CAMPAIGN', message: 'campaign_id is required' },
+      });
+    }
+
+    const result = await enrichmentService.bulkEnrich(workspaceId, campaign_id);
+    res.json({ data: result });
+  } catch (err) {
+    console.error('[Contacts] Bulk enrich error:', err);
+    res.status(500).json({ error: { code: 'BULK_ENRICH_FAILED', message: 'Bulk enrichment failed' } });
+  }
+});
+
+/**
  * POST /api/contacts/:id/enrich
  * Enrich a contact using available providers
  */
@@ -171,6 +194,13 @@ contactsRouter.post('/', async (req, res: Response) => {
       notes,
       custom_fields,
     });
+
+    // Auto-enrich on create (fire-and-forget — don't block the response)
+    if (enrichmentService.getAvailableProviders().length > 0) {
+      enrichmentService.enrich(workspaceId, contact.id).catch((err) => {
+        console.warn('[Contacts] Auto-enrich on create failed:', err);
+      });
+    }
 
     res.status(201).json({ data: contact });
   } catch (err) {

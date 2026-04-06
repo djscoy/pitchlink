@@ -284,27 +284,31 @@ export const replyDetectionService = {
   /**
    * Get recent replies for a workspace (for sidebar badge/display).
    */
-  async getRecentReplies(_workspaceId: string, limit = 20) {
-    const { data, error } = await supabaseAdmin
+  async getRecentReplies(workspaceId: string, limit = 20) {
+    // Use `as any` to avoid deep type instantiation with nested Supabase joins
+    const baseQuery = supabaseAdmin
       .from('deal_activities')
       .select(`
         id,
         deal_id,
         data,
         created_at,
-        deal:deals(
+        deal:deals!inner(
           id,
+          workspace_id,
           contact:contacts(id, email, name, domain),
           campaign:campaigns(id, name)
         )
-      `)
+      ` as '*') as any;
+
+    const { data, error }: { data: any[]; error: any } = await baseQuery
       .eq('type', 'email_received')
+      .eq('deal.workspace_id', workspaceId)
       .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) throw error;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (data || []).filter((a: any) => a.deal !== null);
   },
 };

@@ -19,12 +19,19 @@ export async function apiRequest<T>(
   body?: unknown,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
+    // Timeout guard: if the service worker never responds (e.g. dormant, crashed),
+    // reject after 15 seconds to prevent the UI from hanging indefinitely.
+    const timeout = setTimeout(() => {
+      reject(new Error(`API request timed out: ${method} ${path}`));
+    }, 15000);
+
     chrome.runtime.sendMessage(
       {
         type: 'API_REQUEST',
         payload: { method, path, body },
       },
       (response) => {
+        clearTimeout(timeout);
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
           return;
@@ -63,6 +70,8 @@ export const api = {
       apiRequest<ApiResult<{ data: Record<string, unknown>; providers_used: string[] }>>('POST', `/contacts/${id}/enrich`),
     getEnrichment: (id: string) =>
       apiRequest<ApiResult<{ summary: Record<string, unknown>; providers: { provider: string; fetched_at: string; expires_at: string }[] }>>('GET', `/contacts/${id}/enrichment`),
+    bulkEnrich: (campaignId: string) =>
+      apiRequest<ApiResult<{ enriched: number; failed: number; total: number }>>('POST', '/contacts/bulk-enrich', { campaign_id: campaignId }),
     exportCSV: (campaignId: string) =>
       apiRequest<string>('GET', `/contacts/campaign/${campaignId}/export`),
     listUnassigned: (campaignId: string, params?: { search?: string; limit?: number; offset?: number }) => {
@@ -235,6 +244,75 @@ export const api = {
       body: string;
       threadId?: string;
     }) => apiRequest<ApiResult<{ gmailDraftId: string }>>('POST', '/compose/save-draft', data),
+  },
+
+  // Replies (Reply Detection)
+  replies: {
+    recent: (limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : '';
+      return apiRequest<ApiResult<{ replies: unknown[]; total: number }>>('GET', `/replies/recent${qs}`);
+    },
+    count: (since?: string) => {
+      const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+      return apiRequest<ApiResult<{ count: number; since: string }>>('GET', `/replies/count${qs}`);
+    },
+  },
+
+  // Discovery
+  discovery: {
+    providers: () =>
+      apiRequest<ApiResult<{ providers: string[] }>>('GET', '/discovery/providers'),
+    searchByDomain: (domain: string, params?: { limit?: number; offset?: number }) => {
+      const query = new URLSearchParams({ domain });
+      if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.offset) query.set('offset', String(params.offset));
+      return apiRequest<ApiResult<{
+        prospects: {
+          email: string;
+          first_name?: string;
+          last_name?: string;
+          full_name?: string;
+          job_title?: string;
+          company_name?: string;
+          company_domain?: string;
+          linkedin_url?: string;
+          confidence?: number;
+          source: string;
+        }[];
+        total: number;
+        domain: string;
+        organization?: string;
+      }>>('GET', `/discovery/domain?${query.toString()}`);
+    },
+    searchByRole: (params: {
+      company_domain?: string;
+      titles?: string[];
+      seniorities?: string[];
+      keywords?: string;
+      limit?: number;
+      page?: number;
+    }) =>
+      apiRequest<ApiResult<{
+        prospects: {
+          email: string;
+          first_name?: string;
+          last_name?: string;
+          full_name?: string;
+          job_title?: string;
+          company_name?: string;
+          company_domain?: string;
+          linkedin_url?: string;
+          confidence?: number;
+          source: string;
+        }[];
+        total: number;
+      }>>('POST', '/discovery/people', params),
+  },
+
+  // Auth
+  auth: {
+    renewWatches: () =>
+      apiRequest<ApiResult<{ renewed: number; failed: number }>>('POST', '/auth/renew-watches'),
   },
 
   // IIE (Inbox Identity Engine)

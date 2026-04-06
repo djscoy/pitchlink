@@ -5,6 +5,7 @@ import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { CampaignCardSkeleton } from '../components/Skeleton';
 import { StageBadge } from '../components/StageBadge';
+import { ReplyBadge } from '../components/ReplyBadge';
 
 interface PipelineViewProps {
   mode: TransactionMode;
@@ -21,6 +22,7 @@ interface CampaignStats {
 interface DealWithContact {
   id: string;
   current_stage: string;
+  last_reply_at: string | null;
   contact: { id: string; email: string; name: string; domain: string };
 }
 
@@ -28,6 +30,8 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
   const [campaigns, setCampaigns] = useState<CampaignStats[]>([]);
   const [activeDealsByStage, setActiveDealsByStage] = useState<Record<string, DealWithContact[]>>({});
   const [loading, setLoading] = useState(true);
+  const [bulkEnriching, setBulkEnriching] = useState(false);
+  const [bulkEnrichResult, setBulkEnrichResult] = useState<{ enriched: number; failed: number; total: number } | null>(null);
 
   const modeColors = useModeColors(mode);
 
@@ -144,9 +148,46 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
         &larr; All campaigns
       </button>
 
-      <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-        {activeStats.campaign.name}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div style={{ fontSize: '14px', fontWeight: 600 }}>
+          {activeStats.campaign.name}
+        </div>
+        <button
+          onClick={async () => {
+            setBulkEnriching(true);
+            setBulkEnrichResult(null);
+            try {
+              const res = await api.contacts.bulkEnrich(activeCampaignId!) as { data: { enriched: number; failed: number; total: number } };
+              setBulkEnrichResult(res.data);
+            } catch {
+              setBulkEnrichResult({ enriched: 0, failed: 0, total: 0 });
+            } finally {
+              setBulkEnriching(false);
+            }
+          }}
+          disabled={bulkEnriching}
+          style={{
+            padding: '3px 8px',
+            fontSize: '10px',
+            fontWeight: 600,
+            border: '1px solid var(--pl-border-secondary)',
+            borderRadius: '4px',
+            backgroundColor: bulkEnriching ? 'var(--pl-bg-tertiary)' : 'transparent',
+            color: bulkEnriching ? 'var(--pl-text-tertiary)' : 'var(--pl-text-secondary)',
+            cursor: bulkEnriching ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+          title="Enrich all contacts in this campaign"
+        >
+          {bulkEnriching ? 'Enriching...' : 'Enrich All'}
+        </button>
       </div>
+      {bulkEnrichResult && (
+        <div style={{ fontSize: '11px', color: 'var(--pl-text-secondary)', marginBottom: '8px', padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--pl-bg-secondary)' }}>
+          Enriched {bulkEnrichResult.enriched}/{bulkEnrichResult.total} contacts
+          {bulkEnrichResult.failed > 0 && ` (${bulkEnrichResult.failed} failed)`}
+        </div>
+      )}
 
       {/* Stage columns */}
       {activeStats.stages.map((stage) => {
@@ -185,9 +226,12 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
                     alignItems: 'center',
                   }}
                 >
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 500 }}>
-                      {deal.contact.name || deal.contact.email}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {deal.contact.name || deal.contact.email}
+                      </div>
+                      <ReplyBadge hasReply={!!deal.last_reply_at} replyDate={deal.last_reply_at || undefined} />
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>
                       {deal.contact.domain || deal.contact.email}

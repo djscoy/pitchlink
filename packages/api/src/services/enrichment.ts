@@ -129,9 +129,124 @@ const hunterProvider: EnrichmentProvider = {
   },
 };
 
+// --- Apollo.io Provider ---
+
+const apolloProvider: EnrichmentProvider = {
+  name: 'apollo',
+
+  isConfigured() {
+    return !!process.env.APOLLO_API_KEY;
+  },
+
+  async enrich(email: string): Promise<EnrichmentResult | null> {
+    const apiKey = process.env.APOLLO_API_KEY;
+    if (!apiKey) return null;
+
+    try {
+      const response = await fetch('https://api.apollo.io/v1/people/match', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          'X-Api-Key': apiKey,
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[Enrichment:Apollo] API error ${response.status} for ${email}`);
+        return null;
+      }
+
+      const json = await response.json();
+      const person = json.person;
+      if (!person) return null;
+
+      const org = person.organization || {};
+
+      return {
+        first_name: person.first_name || undefined,
+        last_name: person.last_name || undefined,
+        full_name: person.name || undefined,
+        job_title: person.title || undefined,
+        linkedin_url: person.linkedin_url || undefined,
+        twitter_handle: person.twitter_url || undefined,
+        phone: person.phone_numbers?.[0]?.sanitized_number || undefined,
+        city: person.city || undefined,
+        state: person.state || undefined,
+        country: person.country || undefined,
+        company_name: org.name || undefined,
+        company_domain: org.primary_domain || undefined,
+        company_industry: org.industry || undefined,
+        company_size: org.estimated_num_employees ? String(org.estimated_num_employees) : undefined,
+        company_revenue: org.annual_revenue_printed || undefined,
+        company_founded: org.founded_year ? String(org.founded_year) : undefined,
+        company_linkedin: org.linkedin_url || undefined,
+        seniority: person.seniority || undefined,
+        departments: person.departments?.join(', ') || undefined,
+      };
+    } catch (err) {
+      console.error('[Enrichment:Apollo] Error:', err);
+      return null;
+    }
+  },
+};
+
+// --- DataForSEO Provider ---
+
+const dataForSEOProvider: EnrichmentProvider = {
+  name: 'dataforseo',
+
+  isConfigured() {
+    return !!process.env.DATAFORSEO_LOGIN && !!process.env.DATAFORSEO_PASSWORD;
+  },
+
+  async enrich(_email: string, domain?: string): Promise<EnrichmentResult | null> {
+    const login = process.env.DATAFORSEO_LOGIN;
+    const password = process.env.DATAFORSEO_PASSWORD;
+    if (!login || !password || !domain) return null;
+
+    try {
+      const authHeader = 'Basic ' + Buffer.from(`${login}:${password}`).toString('base64');
+
+      // Backlinks summary for domain metrics
+      const response = await fetch('https://api.dataforseo.com/v3/backlinks/summary/live', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
+        body: JSON.stringify([{ target: domain, internal_list_limit: 0, include_subdomains: true }]),
+      });
+
+      if (!response.ok) {
+        console.warn(`[Enrichment:DataForSEO] API error ${response.status} for ${domain}`);
+        return null;
+      }
+
+      const json = await response.json();
+      const result = json.tasks?.[0]?.result?.[0];
+      if (!result) return null;
+
+      return {
+        domain_rating: result.rank ? Math.round(result.rank / 10) : undefined, // Normalize to 0-100 scale
+        backlinks: result.backlinks || undefined,
+        referring_domains: result.referring_domains || undefined,
+        monthly_traffic: result.estimated_paid_traffic_cost || undefined,
+        spam_score: result.spam_score || undefined,
+        broken_backlinks: result.broken_backlinks || undefined,
+        referring_ips: result.referring_ips || undefined,
+      };
+    } catch (err) {
+      console.error('[Enrichment:DataForSEO] Error:', err);
+      return null;
+    }
+  },
+};
+
 // --- Provider Registry ---
 
-const providers: EnrichmentProvider[] = [hunterProvider];
+const providers: EnrichmentProvider[] = [hunterProvider, apolloProvider, dataForSEOProvider];
 
 // --- Enrichment Service ---
 
@@ -264,6 +379,41 @@ export const enrichmentService = {
       .eq('workspace_id', workspaceId);
 
     return { data: merged, providers_used: providersUsed };
+  },
+
+  /**
+   * Bulk enrich all contacts in a campaign.
+   * Returns counts of enriched and failed contacts.
+   */
+  async bulkEnrich(
+    workspaceId: string,
+    campaignId: string,
+  ): Promise<{ enriched: number; failed: number; total: number }> {
+    // Get all contacts in this campaign via deals
+    const { data: deals, error: dealsError } = await supabaseAdmin
+      .from('deals')
+      .select('contact_id')
+      .eq('campaign_id', campaignId)
+      .eq('workspace_id', workspaceId);
+
+    if (dealsError) throw dealsError;
+    if (!deals || deals.length === 0) return { enriched: 0, failed: 0, total: 0 };
+
+    const contactIds = [...new Set(deals.map((d) => d.contact_id))];
+    let enriched = 0;
+    let failed = 0;
+
+    for (const contactId of contactIds) {
+      try {
+        const result = await this.enrich(workspaceId, contactId);
+        if (result.providers_used.length > 0) enriched++;
+      } catch (err) {
+        console.warn(`[Enrichment] Bulk enrich failed for contact ${contactId}:`, err);
+        failed++;
+      }
+    }
+
+    return { enriched, failed, total: contactIds.length };
   },
 
   /**

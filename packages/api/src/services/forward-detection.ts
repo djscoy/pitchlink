@@ -75,6 +75,7 @@ export const forwardDetectionService = {
     workspaceId: string,
     accessToken: string,
     messageId: string,
+    userEmails?: string[],
   ): Promise<{ iieResult: IIEResult; message: GmailMessage | null }> {
     // Fetch full message (headers + body)
     const message = await this.fetchFullMessage(accessToken, messageId);
@@ -93,10 +94,19 @@ export const forwardDetectionService = {
       return { iieResult: notForward(), message };
     }
 
+    // Collect user's own email addresses to prevent self-resolution
+    const ownEmails = new Set((userEmails || []).map((e) => e.toLowerCase()));
+
     // Layer 0: Source Registry lookup
     const registryResult = await this.checkSourceRegistry(workspaceId, senderEmail);
     if (registryResult) {
-      return { iieResult: registryResult, message };
+      // Safety: never return user's own email as "original sender"
+      if (registryResult.original_sender_email && ownEmails.has(registryResult.original_sender_email.toLowerCase())) {
+        // Bad registry entry — skip it
+        console.warn(`[IIE] Skipping registry entry that maps to user's own email: ${senderEmail} → ${registryResult.original_sender_email}`);
+      } else {
+        return { iieResult: registryResult, message };
+      }
     }
 
     // Layer 1: Header parsing
@@ -167,77 +177,22 @@ export const forwardDetectionService = {
 
   /**
    * Layer 1: Parse email headers for forwarding indicators.
+   *
+   * IMPORTANT: X-Forwarded-To, X-Forwarded-For, and X-Original-To contain the
+   * DESTINATION address (where the email was forwarded TO), NOT the original sender.
+   * When Gmail auto-forwards, the From: header is preserved and IS the real sender.
+   * These headers only tell us the email was routed through auto-forwarding —
+   * they do NOT indicate that someone forwarded another person's email.
+   *
+   * True "client forwarded someone else's email" detection happens in Layer 2
+   * (body regex) and Layer 3 (AI), where the original sender is extracted from
+   * the forwarded content inside the email body.
    */
-  parseForwardHeaders(headers: GmailHeader[], senderEmail: string): IIEResult | null {
-    // Check X-Forwarded-To — explicit forward marker
-    const xForwardedTo = headers.find(
-      (h) => h.name.toLowerCase() === 'x-forwarded-to',
-    )?.value;
-    if (xForwardedTo) {
-      const originalEmail = extractEmail(xForwardedTo);
-      if (originalEmail && originalEmail !== senderEmail) {
-        return {
-          is_forwarded: true,
-          original_sender_email: originalEmail,
-          confidence: 0.9,
-          detection_layer: 'header',
-          forwarding_email: senderEmail,
-        };
-      }
-    }
-
-    // Check X-Forwarded-For
-    const xForwardedFor = headers.find(
-      (h) => h.name.toLowerCase() === 'x-forwarded-for',
-    )?.value;
-    if (xForwardedFor) {
-      const originalEmail = extractEmail(xForwardedFor);
-      if (originalEmail && originalEmail !== senderEmail) {
-        return {
-          is_forwarded: true,
-          original_sender_email: originalEmail,
-          confidence: 0.9,
-          detection_layer: 'header',
-          forwarding_email: senderEmail,
-        };
-      }
-    }
-
-    // Check X-Original-To
-    const xOriginalTo = headers.find(
-      (h) => h.name.toLowerCase() === 'x-original-to',
-    )?.value;
-    if (xOriginalTo) {
-      const originalEmail = extractEmail(xOriginalTo);
-      if (originalEmail && originalEmail !== senderEmail) {
-        return {
-          is_forwarded: true,
-          original_sender_email: originalEmail,
-          confidence: 0.85,
-          detection_layer: 'header',
-          forwarding_email: senderEmail,
-        };
-      }
-    }
-
-    // Compare Delivered-To vs To — mismatch suggests forwarding
-    const deliveredTo = headers.find(
-      (h) => h.name.toLowerCase() === 'delivered-to',
-    )?.value;
-    const toHeader = headers.find(
-      (h) => h.name.toLowerCase() === 'to',
-    )?.value;
-
-    if (deliveredTo && toHeader) {
-      const deliveredEmail = extractEmail(deliveredTo);
-      const toEmail = extractEmail(toHeader);
-      if (deliveredEmail && toEmail && deliveredEmail !== toEmail) {
-        // The message was delivered to a different address than the To: field
-        // This suggests forwarding, but we don't know the original sender from headers alone
-        // Fall through to Layer 2/3
-      }
-    }
-
+  parseForwardHeaders(_headers: GmailHeader[], _senderEmail: string): IIEResult | null {
+    // Auto-forwarding headers (X-Forwarded-To, Delivered-To mismatches) indicate
+    // email routing, not client-forwarded emails. The From: header is still the
+    // real sender in auto-forward scenarios. Fall through to Layer 2/3 for
+    // actual forwarded-email detection via body content analysis.
     return null;
   },
 
