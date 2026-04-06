@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Load .env from monorepo root (handles npm workspace cwd differences)
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env'), override: true });
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
