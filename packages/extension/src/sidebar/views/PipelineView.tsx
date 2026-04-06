@@ -233,7 +233,13 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
                     alignItems: 'center',
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                    onClick={() => {
+                      window.location.hash = `#search/from:${deal.contact.email}+OR+to:${deal.contact.email}`;
+                    }}
+                    title={`Search emails with ${deal.contact.email}`}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {deal.contact.name || deal.contact.email}
