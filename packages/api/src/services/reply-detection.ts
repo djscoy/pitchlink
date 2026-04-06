@@ -51,9 +51,12 @@ export const replyDetectionService = {
 
     if (messages.length === 0) return;
 
-    // 5. Check each new message for forwards and replies
+    // 5. Collect user's own emails (once per batch, for outbound detection)
+    const userEmails = await this.getUserEmails(user.workspace_id, user.id);
+
+    // 6. Check each new message for forwards, replies, and outbound sends
     for (const message of messages) {
-      await this.checkMessage(user.id, user.workspace_id, accessToken, message.id);
+      await this.checkMessage(user.id, user.workspace_id, accessToken, message.id, userEmails);
     }
   },
 
@@ -111,6 +114,7 @@ export const replyDetectionService = {
     workspaceId: string,
     accessToken: string,
     messageId: string,
+    userEmails?: Set<string>,
   ): Promise<void> {
     try {
       // Run forward detection first — this also fetches the full message
@@ -129,6 +133,12 @@ export const replyDetectionService = {
       const senderEmail = extractEmail(fromHeader);
       if (!senderEmail) return;
 
+      // Check if this is an OUTBOUND message (sent by the user)
+      if (userEmails && userEmails.has(senderEmail.toLowerCase())) {
+        await this.handleOutboundMessage(workspaceId, messageId, headers);
+        return;
+      }
+
       // If forward detected with original sender, handle as forward
       if (iieResult.is_forwarded && iieResult.original_sender_email) {
         await this.handleForwardedMessage(
@@ -145,7 +155,6 @@ export const replyDetectionService = {
 
       // Check auto-reply for new inbound messages from unknown contacts
       try {
-        const headers = message.payload?.headers || [];
         const subjectHeader = headers.find(
           (h: { name: string }) => h.name.toLowerCase() === 'subject',
         )?.value || '';
@@ -181,6 +190,74 @@ export const replyDetectionService = {
     } catch (err) {
       console.error(`[ReplyDetection] Error checking message ${messageId}:`, err);
     }
+  },
+
+  /**
+   * Handle an outbound message (sent by the user to a contact).
+   * Auto-advances the deal's pipeline stage to the next stage.
+   */
+  async handleOutboundMessage(
+    workspaceId: string,
+    messageId: string,
+    headers: { name: string; value: string }[],
+  ): Promise<void> {
+    // Extract recipient from To: header
+    const toHeader = headers.find(
+      (h) => h.name.toLowerCase() === 'to',
+    )?.value || '';
+    const recipientEmail = extractEmail(toHeader);
+    if (!recipientEmail) return;
+
+    // Look up recipient as a contact
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('email', recipientEmail.toLowerCase())
+      .maybeSingle();
+
+    if (!contact) return; // Recipient not a tracked contact
+
+    // Find active deals for this contact
+    const { data: deals } = await supabaseAdmin
+      .from('deals')
+      .select(`
+        id,
+        current_stage,
+        campaign_id,
+        campaign:campaigns(pipeline_preset_id, pipeline_preset:pipeline_presets(stages_json))
+      `)
+      .eq('workspace_id', workspaceId)
+      .eq('contact_id', contact.id);
+
+    if (!deals || deals.length === 0) return;
+
+    for (const deal of deals) {
+      // Log email_sent activity
+      await dealsService.logActivity(deal.id, 'email_sent', {
+        gmail_message_id: messageId,
+        to: recipientEmail,
+        detected_at: new Date().toISOString(),
+      });
+
+      // Auto-advance to next stage
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const preset = (deal as any).campaign?.pipeline_preset;
+      if (!preset?.stages_json) continue;
+
+      const stages = preset.stages_json as { id: string }[];
+      const currentStageIdx = stages.findIndex((s) => s.id === deal.current_stage);
+      const nextStage = stages[currentStageIdx + 1];
+
+      if (nextStage) {
+        await dealsService.changeStage(workspaceId, deal.id, nextStage.id);
+        console.log(
+          `[ReplyDetection] Outbound auto-advanced deal ${deal.id}: ${deal.current_stage} → ${nextStage.id}`,
+        );
+      }
+    }
+
+    console.log(`[ReplyDetection] Outbound email detected to ${recipientEmail} (contact ${contact.id})`);
   },
 
   /**
@@ -316,6 +393,44 @@ export const replyDetectionService = {
     }
 
     console.log(`[ReplyDetection] Reply detected from ${senderEmail} for contact ${contact.id}`);
+  },
+
+  /**
+   * Collect all email addresses owned by the user/workspace.
+   * Used to distinguish outbound (user sent) from inbound (contact replied).
+   */
+  async getUserEmails(workspaceId: string, userId: string): Promise<Set<string>> {
+    const emailSet = new Set<string>();
+
+    // email_accounts table
+    const { data: accounts } = await supabaseAdmin
+      .from('email_accounts')
+      .select('email')
+      .eq('workspace_id', workspaceId);
+    for (const acc of accounts || []) {
+      emailSet.add(acc.email.toLowerCase());
+    }
+
+    // User's primary email
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .maybeSingle();
+    if (userData?.email) emailSet.add(userData.email.toLowerCase());
+
+    // Owned emails from workspace settings
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
+      .select('settings_json')
+      .eq('id', workspaceId)
+      .maybeSingle();
+    const settings = (workspace?.settings_json || {}) as Record<string, unknown>;
+    for (const email of ((settings.owned_emails as string[]) || [])) {
+      emailSet.add(email.toLowerCase());
+    }
+
+    return emailSet;
   },
 
   /**
