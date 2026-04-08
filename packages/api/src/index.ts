@@ -43,8 +43,10 @@ app.use(
       if (!origin) return callback(null, true);
       // Allow any chrome-extension origin in development
       if (origin.startsWith('chrome-extension://')) return callback(null, true);
-      // Allow localhost dev
-      if (origin.startsWith('http://localhost:')) return callback(null, true);
+      // Allow localhost only in development
+      if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:')) {
+        return callback(null, true);
+      }
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true,

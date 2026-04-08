@@ -1,7 +1,8 @@
 const path = require('path');
+const webpack = require('webpack');
 const CopyPlugin = require('copy-webpack-plugin');
 
-module.exports = {
+module.exports = (env, argv) => ({
   entry: {
     content: './src/content.tsx',
     background: './src/background/index.ts',
@@ -28,6 +29,13 @@ module.exports = {
     extensions: ['.tsx', '.ts', '.js'],
   },
   plugins: [
+    new webpack.DefinePlugin({
+      __API_BASE__: JSON.stringify(
+        argv.mode === 'production'
+          ? 'https://pitchlink-api-production.up.railway.app/api'
+          : 'http://localhost:3001/api'
+      ),
+    }),
     new CopyPlugin({
       patterns: [
         { from: 'manifest.json', to: 'manifest.json' },
@@ -41,5 +49,5 @@ module.exports = {
   optimization: {
     splitChunks: false,
   },
-  devtool: 'cheap-module-source-map',
-};
+  devtool: argv.mode === 'production' ? false : 'cheap-module-source-map',
+});

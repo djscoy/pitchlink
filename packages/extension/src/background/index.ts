@@ -92,7 +92,8 @@ interface ApiRequestPayload {
   body?: unknown;
 }
 
-const API_BASE = 'http://localhost:3001/api'; // TODO: env-based
+declare const __API_BASE__: string;
+const API_BASE = typeof __API_BASE__ !== 'undefined' ? __API_BASE__ : 'http://localhost:3001/api';
 
 async function handleApiRequest(
   payload: ApiRequestPayload,
