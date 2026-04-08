@@ -3,7 +3,9 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./",
-    "composite": true
+    "composite": true,
+    "module": "CommonJS",
+    "moduleResolution": "node"
   },
   "include": ["types/**/*.ts", "constants/**/*.ts", "theme/**/*.ts", "index.ts"]
 }
