@@ -32,7 +32,7 @@ module.exports = (env, argv) => ({
     new webpack.DefinePlugin({
       __API_BASE__: JSON.stringify(
         argv.mode === 'production'
-          ? 'https://pitchlink-api-production.up.railway.app/api'
+          ? 'https://pitchlinkapi-production.up.railway.app/api'
           : 'http://localhost:3001/api'
       ),
     }),
