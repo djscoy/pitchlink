@@ -8,7 +8,7 @@ Read `CLAUDE.md` first — it has the full product spec, tech stack, database sc
 
 ---
 
-## Current State (as of April 5, 2026)
+## Current State (as of April 8, 2026)
 
 ### Phases Complete
 
@@ -19,22 +19,57 @@ Read `CLAUDE.md` first — it has the full product spec, tech stack, database sc
 | 2 | Reply Detection (Gmail Pub/Sub) + Email Templates | DONE |
 | 3 | Inbox Identity Engine (IIE) — 4-layer forward detection | DONE |
 | 4 | AI Compose, Nudge Sequences, Contact Enrichment, Dashboard Metrics, Bulk Assignment | DONE |
+| 5 | UI Polish — Light/dark theme, resizable sidebar, keyboard shortcuts, empty states | DONE |
+| 6 | Beta & Launch — Auto-reply system, settings tabs, Railway deployment | IN PROGRESS |
+| 7 | Enrichment & Discovery — Explorium/Vibe Prospecting, Hunter.io, Apollo.io | IN PROGRESS |
 
-### What's Next: Phase 5 — UI Polish, Theme System & Sidebar UX
+### What's Working End-to-End
 
-The core functionality is all built. Phase 5 is about polish:
-- CSS custom properties cleanup (remove any remaining hardcoded colors)
-- Light/dark theme refinement and contrast audit
-- Resizable sidebar with drag handle (220px–540px)
-- Compact top bar polish (42px)
-- Dashboard campaign cards with progress bars
-- Contact card enrichment display polish
-- Empty states and loading skeleton improvements
-- Error state graceful degradation
-- Keyboard shortcuts
-- Performance audit
+- Chrome Extension sidebar (React + InboxSDK) inside Gmail
+- Pipeline view with configurable stages per campaign
+- Contact panel with enrichment, compose, sequence enrollment
+- Template-based AI compose (Claude API) with variable resolution
+- Outbound email detection + auto-advance pipeline stage via Gmail Pub/Sub
+- Auto-reply system (AI classifier + pricing template) with draft-hold mode
+- Sequence builder with visual banner (fire time, skip step), template per step
+- Click-to-thread navigation from Pipeline and History views
+- Settings panel (Auto-Reply | My Emails | Forwarding tabs)
+- My Email Addresses management (114+ owned addresses for contact identification)
+- Light/dark theme system with CSS custom properties
+- Keyboard shortcuts (Alt+1-5 tabs, Alt+B/S/X modes, Escape to close)
 
-After Phase 5: Phase 6 is Beta & Launch (Sentry, feedback, Chrome Web Store submission, landing page, Stripe).
+---
+
+## Deployment
+
+### Railway (Backend API) — LIVE
+- **URL:** `https://pitchlinkapi-production.up.railway.app`
+- **Health check:** `https://pitchlinkapi-production.up.railway.app/api/health`
+- **Railway project:** `terrific-ambition` → `@pitchlink/api` service
+- **Auto-deploy:** Connected to `djscoy/pitchlink` `main` branch on GitHub
+- **Background jobs running 24/7:**
+  - Sequence executor: fires every 5 minutes
+  - Auto-reply executor: fires every 60 seconds
+- **Environment:** `NODE_ENV=production`, env vars set in Railway dashboard
+- **Config:** `railway.json` at repo root (build/start commands, restart policy)
+- **CORS:** Production blocks localhost, allows `chrome-extension://` origins
+- **Health check is currently DISABLED** in Railway settings (was causing deploy failures). Can re-enable once stable.
+
+### GCP Pub/Sub (Gmail Notifications) — LIVE
+- **Project:** `PitchLinkCRM`
+- **Topic:** `pitchlink-gmail-notifications`
+- **Subscription:** `pitchlink-gmail-notifications-sub` (Push type)
+- **Push endpoint:** `https://pitchlinkapi-production.up.railway.app/api/gmail/webhook`
+
+### Supabase (Database) — LIVE
+- **Project ID:** `btfdfopavoylnwvuqmre`
+- **9 migrations** applied (00001–00009)
+
+### Chrome Extension
+- **Build:** `npm run build --workspace=packages/extension` (webpack production mode)
+- **API target:** Production build → Railway URL, dev build → `localhost:3001`
+- **Configured via:** `webpack.DefinePlugin` injects `__API_BASE__` at build time
+- **Dev mode:** `npm run dev` uses localhost as always
 
 ---
 
@@ -45,83 +80,75 @@ C:\Users\scoy\projects\crm\
 ├── CLAUDE.md                  ← Full product spec — READ THIS FIRST
 ├── DEVELOPMENT_PLAN.md        ← Phased build plan with acceptance criteria
 ├── HANDOFF.md                 ← This file
+├── railway.json               ← Railway deployment config
 ├── packages/
-│   ├── shared/                ← Shared types & constants
-│   │   └── types/index.ts     ← All TypeScript interfaces
-│   ├── api/                   ← Node.js + Express backend (port 3001)
+│   ├── shared/                ← Shared types & constants (CommonJS output)
+│   │   ├── types/index.ts     ← All TypeScript interfaces
+│   │   ├── constants/index.ts ← Modes, colors, pipeline presets, rate limits
+│   │   └── theme/index.ts     ← CSS custom properties and theme utilities
+│   ├── api/                   ← Node.js + Express backend
 │   │   └── src/
-│   │       ├── routes/        ← 12 route files
-│   │       ├── services/      ← 18 service files
-│   │       ├── middleware/     ← auth.ts (Google OAuth + Supabase)
-│   │       └── db/            ← supabase.ts (admin client)
+│   │       ├── index.ts       ← Express app, route mounting, executor startup
+│   │       ├── routes/        ← 14 route files
+│   │       ├── services/      ← 17+ service files
+│   │       ├── middleware/     ← auth.ts, rate-limit.ts
+│   │       ├── db/            ← supabase.ts (admin client)
+│   │       └── utils/         ← email.ts (parsing helpers)
 │   └── extension/             ← Chrome Extension (React + TS + Webpack)
 │       ├── src/
-│       │   ├── sidebar/       ← Sidebar.tsx + ThemeProvider + views/ + components/
-│       │   ├── background/    ← Service worker (MV3)
+│       │   ├── sidebar/       ← Sidebar.tsx + ThemeProvider + views/ + components/ + hooks/
+│       │   ├── background/    ← Service worker (MV3) — proxies API requests with auth
 │       │   ├── gmail-adapter/ ← InboxSDK isolation layer
 │       │   ├── iie/           ← Inbox Identity Engine client-side
 │       │   ├── cache/         ← IndexedDB offline cache
-│       │   └── utils/         ← api.ts (typed API client)
+│       │   ├── utils/         ← api.ts (typed API client via chrome.runtime.sendMessage)
+│       │   ├── globals.d.ts   ← TypeScript declaration for __API_BASE__
+│       │   └── styles/        ← CSS (theme system)
 │       ├── manifest.json
-│       └── webpack.config.js
+│       └── webpack.config.js  ← DefinePlugin for API_BASE (dev vs prod)
 └── supabase/
-    └── migrations/            ← 7 migration files (00001–00007)
+    └── migrations/            ← 9 migration files (00001–00009)
 ```
 
 ---
 
-## Key Files You'll Work With
+## Key Files
 
-### Extension — Sidebar Views (10 files)
+### Extension — Sidebar Views (12+ files)
 | File | Purpose |
 |------|---------|
 | `Sidebar.tsx` | Root component — tabs, routing, thread detection, mode switching |
-| `ContactPanel.tsx` | Shows when email thread is open — contact info, campaigns, deals, stage changes, enrichment, sequence enrollment, compose |
-| `DashboardView.tsx` | Shows when no thread open + Pipeline tab — metrics grid, campaign list, create campaign |
+| `ContactPanel.tsx` | Thread view — contact info, deals, stage changes, enrichment, sequences, compose |
+| `DashboardView.tsx` | No-thread view — metrics grid, campaign list, create campaign |
 | `PipelineView.tsx` | Kanban-style view of deals by stage within a campaign |
-| `NudgesView.tsx` | Nudges tab — Queue (active enrollments) and Sequences (manage sequences) |
-| `TemplatePanel.tsx` | Templates tab — CRUD for email templates with variable system |
-| `ComposePanel.tsx` | AI compose overlay — generates contextual emails via Claude API |
-| `BulkAssignView.tsx` | Bulk assign contacts to campaigns — select contacts, create deals |
-| `OnboardingView.tsx` | First-run onboarding — scans Gmail for existing contacts |
-| `HistoryView.tsx` | History tab — deal activity log |
-| `SourceRegistryView.tsx` | IIE source registry settings — forwarding address mappings |
+| `NudgesView.tsx` | Queue (active enrollments) and Sequences library |
+| `TemplatePanel.tsx` | Templates tab — CRUD with variable system |
+| `ComposePanel.tsx` | AI compose — generates contextual emails via Claude API |
+| `HistoryView.tsx` | History tab — global deal activity log |
+| `DiscoveryView.tsx` | Discovery tab — domain/people search for prospecting |
+| `BulkAssignView.tsx` | Bulk assign contacts to campaigns |
+| `OnboardingView.tsx` | First-run onboarding — scans Gmail for contacts |
+| `AutoReplySettingsView.tsx` | Auto-reply rule configuration and queue |
+| `MyEmailsView.tsx` | Manage owned email addresses (for contact identification) |
+| `SourceRegistryView.tsx` | IIE forwarding address mappings |
 
-### API — Routes (12 files)
-`health`, `auth`, `contacts`, `campaigns`, `deals`, `pipeline-presets`, `templates`, `sequences`, `compose`, `iie`, `onboarding`, `gmail-webhook`
+### API — Routes (14 files)
+`health`, `auth`, `contacts`, `campaigns`, `deals`, `pipeline-presets`, `templates`, `sequences`, `compose`, `iie`, `onboarding`, `gmail-webhook`, `replies`, `auto-reply`, `discovery`
 
-### API — Services (18 files)
-`contacts`, `campaigns`, `deals`, `pipeline-presets`, `templates`, `sequences`, `sequence-executor`, `enrichment`, `ai-compose`, `nudge-drafter`, `forward-detection`, `ai-inference`, `source-registry`, `reply-detection`, `gmail-watch`, `gmail-scan`, `onboarding-scan`, `deal-classifier`
-
-### Extension — API Client
-`packages/extension/src/utils/api.ts` — Typed API client. All requests go through `chrome.runtime.sendMessage` to the service worker, which injects the auth token and proxies to the backend.
-
----
-
-## Build & Test Commands
-
-```bash
-# Build shared types (MUST do first — other packages depend on it)
-cd packages/shared && npx tsc
-
-# Typecheck API (doesn't emit, just validates)
-npx tsc --noEmit --project packages/api/tsconfig.json
-
-# Build extension (creates dist/ folder for Chrome)
-cd packages/extension && npx webpack --mode development
-
-# Start API server (port 3001)
-npm run dev --workspace=packages/api
-
-# Start everything (API + extension watch)
-npm run dev
-```
-
-### Loading the Extension in Chrome
-1. Go to `chrome://extensions`
-2. Enable Developer Mode
-3. Click "Load unpacked" → select `packages/extension/dist`
-4. **IMPORTANT:** After rebuilding, you must click the reload button on the extension card in `chrome://extensions` for changes to take effect. Chrome caches content scripts.
+### API — Key Services
+| Service | Purpose |
+|---------|---------|
+| `reply-detection.ts` | Processes Gmail Pub/Sub notifications — reply detect, outbound detect, auto-reply trigger |
+| `sequence-executor.ts` | Fires due sequence steps every 5 min, creates Gmail drafts |
+| `auto-reply-executor.ts` | Processes auto-reply queue every 60s |
+| `auto-reply.ts` | Classifies inbound emails, matches rules, queues responses |
+| `ai-compose.ts` | Claude API for email generation + Gmail draft creation |
+| `inquiry-classifier.ts` | AI classification for auto-reply (is_inquiry, confidence) |
+| `sequences.ts` | Sequence CRUD & enrollment lifecycle |
+| `enrichment.ts` | Multi-provider contact enrichment (Hunter, Apollo, DataForSEO, Explorium) |
+| `discovery.ts` | Contact discovery/prospecting provider integrations |
+| `forward-detection.ts` | IIE 4-layer cascade for identifying forwarded email senders |
+| `gmail-watch.ts` | Register/renew Gmail Pub/Sub watches |
 
 ---
 
@@ -130,14 +157,37 @@ npm run dev
 - **Supabase project ID:** `btfdfopavoylnwvuqmre`
 - **Workspace ID (dev):** `55fede7f-a8ef-451b-b362-4148f7ae5b3d`
 - **RLS:** Every table has `workspace_id`. Row-level security is enforced everywhere.
-- **7 migrations** applied (00001–00007)
+- **9 migrations** applied (00001–00009)
 
 ### Key Tables
-`users`, `workspaces`, `email_accounts`, `contacts`, `contact_enrichment`, `campaigns`, `pipeline_presets`, `deals`, `deal_activities`, `templates`, `sequences`, `sequence_enrollments`, `source_registry`, `email_tracking`, `onboarding_scans`, `onboarding_contacts`
+`users`, `workspaces`, `email_accounts`, `contacts`, `contact_enrichment`, `campaigns`, `pipeline_presets`, `deals`, `deal_activities`, `templates`, `sequences`, `sequence_enrollments`, `source_registry`, `email_tracking`, `onboarding_state`, `gmail_watch_state`, `auto_reply_config`, `inquiry_classifications`
 
 ### Important Constraints
-- `deals` has a unique constraint on `(contact_id, campaign_id)` — NOT `(workspace_id, contact_id, campaign_id)`. The bulk create upsert uses `onConflict: 'contact_id,campaign_id'` with `ignoreDuplicates: true`.
-- `contact_enrichment` has a unique constraint on `(contact_id, provider)`.
+- `deals` has a unique constraint on `(contact_id, campaign_id)` — NOT `(workspace_id, contact_id, campaign_id)`
+- `contact_enrichment` has a unique constraint on `(contact_id, provider)`
+
+---
+
+## Current Data State
+
+- **1 user:** `mail@scoyagency.com`
+- **1 workspace**
+- **4 campaigns:**
+  - LiveNewsChat.eu (sell mode)
+  - LNC Guest Posts April 2026 (buy mode)
+  - Test Campaign Q2 (buy mode)
+  - Q2 2026 Link Exchange (exchange mode)
+- **~590 contacts** imported via onboarding scan
+- **114 owned email addresses** in workspace settings
+- Templates, sequences, deals all populated
+
+### Active LNC Sell Campaign
+Selling guest posts on livenewschat.eu. Current pricing:
+- $125 Regular Niches
+- $150 Essay Writing / Finance/Forex / Legal Injury
+- $195 Casino, Sportsbook, CBD, Crypto, Dating
+- Link Insertions: $85 Regular, $125 Finance, $175 Casino
+- Terms: 2-3 dofollow links, no sponsored tag, permanent, 36hr TAT, payment after live link
 
 ---
 
@@ -153,27 +203,15 @@ npm run dev
 
 ## Architecture Decisions & Gotchas
 
-### Extension runs in a cross-origin iframe
-The sidebar is inside an iframe injected by InboxSDK. It CANNOT access the Gmail page DOM. All Gmail data comes from the Gmail API via the backend, or through InboxSDK's abstraction layer.
+### Extension API routing
+The extension sidebar does NOT call `fetch()` directly. All requests go: sidebar → `chrome.runtime.sendMessage({ type: 'API_REQUEST' })` → service worker → `fetch(API_BASE + path)` with auth token → backend API.
+
+The `API_BASE` is injected at webpack build time:
+- Dev build (`--mode development`): `http://localhost:3001/api`
+- Prod build (`--mode production`): `https://pitchlinkapi-production.up.railway.app/api`
 
 ### InboxSDK isolation
-All InboxSDK code lives in `gmail-adapter/`. Sidebar components never import InboxSDK directly. The `GmailAdapter` class exposes `onThreadView()` which fires with `ThreadViewData` (sender email, thread ID, message IDs) when the user opens an email.
-
-### API client routing
-`api.ts` doesn't call `fetch()` directly. It sends messages to the service worker via `chrome.runtime.sendMessage({ type: 'API_REQUEST', payload })`. The service worker (`background/service-worker.ts`) handles the actual HTTP request with auth token injection.
-
-### Enrichment providers
-Pluggable architecture via `EnrichmentProvider` interface. Currently only Hunter.io is implemented. The `enrichmentService.enrich()` method iterates all configured providers, caches results per provider with 30-day TTL, and merges results (first provider wins per field).
-
-### Sequence enrollment lifecycle
-`active` → `paused` (manual or reply_received) → `resumed` → `cancelled` or `completed`
-- `pauseEnrollment(enrollmentId, reason)` — NO workspaceId param
-- `resumeEnrollment(workspaceId, enrollmentId)`
-- `cancelEnrollment(workspaceId, enrollmentId)`
-- `pauseByDeal(dealId, reason)` — used by reply detection to auto-pause on reply
-
-### AI Compose
-Uses Anthropic Claude API (model: `claude-haiku-4-5-20251001`). The `ai-compose` service builds a context-aware prompt with contact data, campaign info, thread history, and mode-specific instructions.
+All InboxSDK code lives in `gmail-adapter/`. Sidebar components never import InboxSDK directly. The `GmailAdapter` class exposes `onThreadView()` which fires with thread data when the user opens an email.
 
 ### Three Transaction Modes
 - **Buy** (Blue `#2563EB`) — You are acquiring something
@@ -182,40 +220,86 @@ Uses Anthropic Claude API (model: `claude-haiku-4-5-20251001`). The `ai-compose`
 
 Every campaign, deal, template, and sequence is mode-scoped.
 
----
+### Sequence enrollment lifecycle
+`active` → `paused` (manual or reply_received) → `resumed` → `cancelled` or `completed`
+- Reply detection auto-pauses active enrollments when a contact replies
 
-## Current Data State (Dev Environment)
+### Auto-reply flow
+Inbound email → reply-detection service → auto-reply service classifies → matches rule → resolves template → queues with delay → auto-reply executor fires (draft or send)
 
-- ~590 contacts imported via onboarding scan (real Gmail contacts)
-- 1 campaign: "LNC Guest Posts - April 2026" (Buy mode, Link Building preset)
-- 1 deal: blake@mybacklinks.co in the campaign at "Quote Received" stage
-- 1 sequence: "Guest Post Follow-Up" (2 steps: 3d, 5d)
-- 1 active sequence enrollment: blake mybacklinks enrolled in Guest Post Follow-Up
-- Enrichment: No API keys configured (Hunter.io key not set), so enrichment returns "No enrichment providers configured"
-- Templates: Several templates exist from Phase 2
+### Draft-Hold Mode
+User preference: save to Gmail Drafts for review instead of auto-sending. Both sequences and auto-replies support this.
 
 ---
 
-## Known Issues & Improvement Areas
+## Build & Test Commands
 
-1. **Enrichment error display:** When enrichment fails (no API key), the frontend shows "API error: 400" instead of the actual message "No enrichment providers configured. Add API keys in settings." The error propagation from API → service worker → sidebar could show the actual error message.
+```bash
+# Start everything (API + extension watch) for local development
+npm run dev
 
-2. **DEVELOPMENT_PLAN.md not updated:** The phase checkboxes are all still `[ ]` (not started). They should be marked complete. Consider updating them.
+# Build all packages
+npm run build
 
-3. **Sequence executor not running:** The `sequence-executor.ts` service has the logic to fire sequence steps when `next_fire_at` is due, but there's no cron job or scheduler actually running it yet. It needs to be called periodically (e.g., every minute via `setInterval` or a proper job scheduler).
+# Build shared types (MUST do first — other packages depend on it)
+npm run build --workspace=packages/shared
 
-4. **Auto-send not implemented:** The Auto-Send toggle (Send Now vs Draft Hold) exists in the Phase 4 spec but the actual sending infrastructure (SendGrid or Gmail API send) is not wired up. Currently compose generates drafts only.
+# Build API
+npm run build --workspace=packages/api
 
-5. **Reply detection Pub/Sub:** The Gmail webhook endpoint and reply detection service exist, but the Pub/Sub subscription may need verification that it's actively receiving push notifications.
+# Build extension (production — points to Railway)
+npm run build --workspace=packages/extension
 
-6. **No settings UI:** There's no settings panel for managing API keys (enrichment providers), auto-send preferences, or other workspace settings. This would be a good Phase 5 addition.
+# Build extension (dev — points to localhost)
+npm run dev --workspace=packages/extension
 
-7. **Theme system:** Dark theme works well. Light theme exists but hasn't been thoroughly tested. Some components may have hardcoded dark-theme colors.
+# Typecheck everything
+npm run typecheck
+```
+
+### Loading the Extension in Chrome
+1. Go to `chrome://extensions`
+2. Enable Developer Mode
+3. Click "Load unpacked" → select `packages/extension/dist`
+4. After rebuilding, click the reload button on the extension card
 
 ---
 
-## Environment Variables Needed
+## Known Issues
 
+1. **Extension may lose auth session** — restart API server + refresh Gmail to fix
+2. **Gmail Pub/Sub watch** needs periodic renewal (every 7 days) — currently manual
+3. **Enrichment providers** — most API keys not configured yet (Hunter, Apollo, Explorium)
+4. **Railway health check disabled** — was causing deploy failures, can re-enable later
+5. **Auto-send not implemented** — sequences and auto-reply create drafts only (by user preference)
+
+---
+
+## What's Next
+
+### Phase 6 (remaining)
+- Sentry monitoring integration
+- Chrome Web Store listing
+- Landing page
+- Stripe billing integration
+- Re-enable Railway health check
+
+### Phase 7 (remaining)
+- Enrichment provider configuration UI in settings
+- Discovery search optimization
+- Bulk enrichment improvements
+
+### Phase 8+
+- Team collaboration (multi-user workspaces)
+- Client reporting (white-label reports for clients)
+- White-label reseller layer
+- Mobile support (Gmail Workspace Add-On)
+
+---
+
+## Environment Variables
+
+### Local Development (`.env` at repo root)
 ```
 SUPABASE_URL=https://btfdfopavoylnwvuqmre.supabase.co
 SUPABASE_ANON_KEY=<key>
@@ -224,62 +308,34 @@ GOOGLE_CLIENT_ID=<id>.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=<secret>
 EXTENSION_ID=<from chrome://extensions>
 PORT=3001
+NODE_ENV=development
 ANTHROPIC_API_KEY=<key>
-# HUNTER_API_KEY=<optional, for enrichment>
+GCP_PROJECT_ID=<project-id>
+GCP_PUBSUB_TOPIC=pitchlink-gmail-notifications
+GMAIL_WEBHOOK_URL=https://pitchlinkapi-production.up.railway.app/api/gmail/webhook
 ```
 
-The `.env` file is at the repo root and is loaded by the API server.
+### Railway Production (set in Railway dashboard)
+Same vars as above, plus `NODE_ENV=production`. Do NOT set `PORT` — Railway injects it automatically.
 
 ---
 
-## Git History (Recent Commits)
+## Git History (Recent)
 
 ```
-c866500 feat: campaign assignment UI in contact card, deals-by-contact API
-daa3e68 fix: IIE thread ID fallback, Original Message regex, messageID retry
-106e702 fix: auth middleware accepts Google OAuth tokens with auto-provisioning
-c888df7 fix: use async InboxSDK APIs for thread/message ID resolution
-c36e580 feat: Phase 3 — Inbox Identity Engine (IIE) for forward detection
-2e375d1 fix: resolve InboxSDK MV3 integration issues for Gmail sidebar
-d466d0c feat: PitchLink Phases 0-2 — scaffolding, core CRM, reply detection & templates
+ab3e87a fix: set Railway production URL and remove health check for stable deploy
+e590ab0 chore: trigger Railway redeploy
+b4c278e fix: compile shared package to CommonJS for Railway Node.js runtime
+97e8731 feat: Railway deployment — configurable API_BASE, production CORS, health check
+c7a0bcc feat: enhanced sequence builder — visual banner with fire time, skip step, template per step
+239f136 feat: click history activity to jump to contact's Gmail thread
+c307431 feat: click contact name in pipeline to jump to their Gmail thread
+0c409b8 feat: auto-advance pipeline stage when user sends email to contact
+fbb2990 feat: template-based AI compose — pick a template, AI personalizes it
+abbade6 fix: split settings into tabbed layout (Auto-Reply | My Emails | Forwarding)
+1c14b7f feat: auto-reply system for inbound guest post inquiries
+40a410b feat: add Vibe Prospecting (Explorium) as enrichment & discovery provider
+58a3698 feat: Phase 2B — contact enrichment, discovery, and IIE fix
 ```
 
-**IMPORTANT:** The Phase 4 features are NOT committed yet. There are 30+ uncommitted files. You should commit them before starting new work. Here are the uncommitted changes:
-
-**Modified files (existing, updated for Phase 4):**
-- `packages/api/src/index.ts` — Added new route imports (compose, onboarding, sequences)
-- `packages/api/src/routes/campaigns.ts` — Added dashboard-stats route
-- `packages/api/src/routes/contacts.ts` — Added enrichment routes + unassigned route
-- `packages/api/src/routes/deals.ts` — Added bulk create route
-- `packages/api/src/services/campaigns.ts` — Added getDashboardStats method
-- `packages/api/src/services/contacts.ts` — Added listUnassigned method
-- `packages/api/src/services/deals.ts` — Added bulkCreate method
-- `packages/api/src/services/reply-detection.ts` — Added pauseByDeal on reply
-- `packages/extension/src/gmail-adapter/GmailAdapter.ts` — Thread data improvements
-- `packages/extension/src/sidebar/Sidebar.tsx` — Added NudgesView, BulkAssignView, OnboardingView
-- `packages/extension/src/sidebar/views/ContactPanel.tsx` — Added enrichment, sequences, compose sections
-- `packages/extension/src/sidebar/views/DashboardView.tsx` — Added metrics grid, bulk assign button
-- `packages/extension/src/utils/api.ts` — Added all new API methods
-- `packages/shared/types/index.ts` — Added Sequence, SequenceEnrollment, etc.
-
-**New files (created for Phase 4):**
-- `packages/api/src/routes/compose.ts`
-- `packages/api/src/routes/onboarding.ts`
-- `packages/api/src/routes/sequences.ts`
-- `packages/api/src/services/ai-compose.ts`
-- `packages/api/src/services/deal-classifier.ts`
-- `packages/api/src/services/enrichment.ts`
-- `packages/api/src/services/gmail-scan.ts`
-- `packages/api/src/services/nudge-drafter.ts`
-- `packages/api/src/services/onboarding-scan.ts`
-- `packages/api/src/services/sequence-executor.ts`
-- `packages/api/src/services/sequences.ts`
-- `packages/extension/src/sidebar/views/BulkAssignView.tsx`
-- `packages/extension/src/sidebar/views/ComposePanel.tsx`
-- `packages/extension/src/sidebar/views/NudgesView.tsx`
-- `packages/extension/src/sidebar/views/OnboardingView.tsx`
-- `supabase/migrations/00005_onboarding_scan.sql`
-- `supabase/migrations/00006_sequences.sql`
-- `supabase/migrations/00007_contact_enrichment.sql`
-
-**First thing to do:** Commit all these changes, then start Phase 5.
+All changes are committed and pushed to `main`. Railway auto-deploys on push.
