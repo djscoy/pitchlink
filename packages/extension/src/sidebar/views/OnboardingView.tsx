@@ -650,7 +650,7 @@ function ContactCard({
         border: '1px solid var(--pl-border-primary)',
         marginBottom: '4px',
         backgroundColor: isDecided
-          ? contact.status === 'accepted' ? 'rgba(16, 185, 129, 0.05)' : 'rgba(107, 114, 128, 0.05)'
+          ? contact.status === 'accepted' ? 'var(--pl-success-bg, rgba(16, 185, 129, 0.05))' : 'rgba(107, 114, 128, 0.05)'
           : 'var(--pl-bg-primary)',
         opacity: contact.status === 'rejected' ? 0.5 : 1,
       }}

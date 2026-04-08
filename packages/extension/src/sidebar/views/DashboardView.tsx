@@ -147,7 +147,7 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
         }}>
           <MetricCard label="Contacts" value={stats.total_contacts} color="var(--pl-text-primary)" />
           <MetricCard label="Deals" value={stats.total_deals} color={modeColors.color} />
-          <MetricCard label="Replies" value={stats.recent_replies} subtitle="30d" color="var(--pl-success, #10B981)" />
+          <MetricCard label="Replies" value={stats.recent_replies} subtitle="30d" color="var(--pl-success)" />
           <MetricCard label="Sequences" value={stats.active_enrollments} color="var(--pl-text-secondary)" />
           <MetricCard label="Enriched" value={stats.enriched_contacts} color="var(--pl-text-secondary)" />
           <MetricCard label="Campaigns" value={stats.active_campaigns} color="var(--pl-text-secondary)" />
@@ -214,7 +214,7 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
             style={{ cursor: 'pointer' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '13px', fontWeight: 600 }}>{campaign.name}</div>
+              <div style={{ fontSize: '13px', fontWeight: 600 }} title={campaign.name}>{campaign.name}</div>
               <span style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>
                 {totalDeals > 0 ? `${totalDeals} contact${totalDeals !== 1 ? 's' : ''}` : campaign.status}
               </span>

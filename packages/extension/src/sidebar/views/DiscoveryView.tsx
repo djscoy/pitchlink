@@ -362,7 +362,7 @@ export function DiscoveryView({ mode }: DiscoveryViewProps) {
                 )}
                 <div style={{ display: 'flex', gap: '6px', marginTop: '3px', alignItems: 'center' }}>
                   {prospect.confidence && (
-                    <span style={{ fontSize: '10px', color: prospect.confidence >= 80 ? 'var(--pl-success, #059669)' : 'var(--pl-text-tertiary)' }}>
+                    <span style={{ fontSize: '10px', color: prospect.confidence >= 80 ? 'var(--pl-success)' : 'var(--pl-text-tertiary)' }}>
                       {prospect.confidence}% conf.
                     </span>
                   )}
@@ -385,7 +385,7 @@ export function DiscoveryView({ mode }: DiscoveryViewProps) {
               {/* Action buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginLeft: '8px', flexShrink: 0 }}>
                 {isAdded ? (
-                  <span style={{ fontSize: '10px', color: 'var(--pl-success, #059669)', fontWeight: 600 }}>Added</span>
+                  <span style={{ fontSize: '10px', color: 'var(--pl-success)', fontWeight: 600 }}>Added</span>
                 ) : (
                   <>
                     <button

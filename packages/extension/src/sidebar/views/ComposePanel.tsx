@@ -185,7 +185,7 @@ export function ComposePanel({
             {templateBase && (
               <div style={{
                 fontSize: '10px',
-                color: '#059669',
+                color: 'var(--pl-success)',
                 marginTop: '3px',
                 fontWeight: 500,
               }}>
@@ -242,10 +242,10 @@ export function ComposePanel({
             marginTop: '8px',
             padding: '8px',
             fontSize: '12px',
-            color: '#EF4444',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            color: 'var(--pl-error)',
+            backgroundColor: 'var(--pl-error-bg, rgba(239, 68, 68, 0.1))',
             borderRadius: '4px',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
+            border: '1px solid var(--pl-error-border, rgba(239, 68, 68, 0.2))',
           }}>
             {error}
           </div>

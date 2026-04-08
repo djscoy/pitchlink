@@ -115,17 +115,27 @@ export function HistoryView({ mode }: HistoryViewProps) {
         return (
           <div
             key={activity.id}
+            className={contact?.email ? 'pl-clickable-row' : ''}
+            role={contact?.email ? 'button' : undefined}
+            tabIndex={contact?.email ? 0 : undefined}
             onClick={() => {
               if (contact?.email) {
                 window.location.hash = `#search/from:${contact.email}+OR+to:${contact.email}`;
               }
             }}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ' ') && contact?.email) {
+                e.preventDefault();
+                window.location.hash = `#search/from:${contact.email}+OR+to:${contact.email}`;
+              }
+            }}
+            title={contact?.email ? `Search emails with ${contact.email}` : undefined}
             style={{
               display: 'flex',
               gap: '8px',
-              padding: '8px 0',
+              padding: '8px 4px',
               borderBottom: '1px solid var(--pl-border-primary)',
-              cursor: contact?.email ? 'pointer' : 'default',
+              borderRadius: '4px',
             }}
           >
             <div style={{ fontSize: '14px', lineHeight: '20px', flexShrink: 0 }}>

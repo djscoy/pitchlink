@@ -3,6 +3,7 @@ import type { Template, TransactionMode } from '@pitchlink/shared';
 import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface TemplatePanelProps {
   mode: TransactionMode;
@@ -29,7 +30,7 @@ export function TemplatePanel({ mode, onInsert, contactContext }: TemplatePanelP
       const result = await api.templates.list(mode) as {
         data: { templates: Template[]; total: number };
       };
-      setTemplates(result.data.templates);
+      setTemplates(result.data?.templates || []);
     } catch (err) {
       console.error('[TemplatePanel] Failed to load:', err);
     } finally {
@@ -179,8 +180,17 @@ function TemplateCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const [showConfirm, setShowConfirm] = useState(false);
+
   return (
     <div className="pl-card">
+      {showConfirm && (
+        <ConfirmDialog
+          message={`Delete template "${template.name}"?`}
+          onConfirm={() => { setShowConfirm(false); onDelete(); }}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '13px', fontWeight: 600 }}>{template.name}</div>
@@ -229,7 +239,8 @@ function TemplateCard({
           )}
           <button
             onClick={onEdit}
-            title="Edit"
+            title="Edit template"
+            aria-label="Edit template"
             style={{
               background: 'none',
               border: 'none',
@@ -242,8 +253,9 @@ function TemplateCard({
             &#9998;
           </button>
           <button
-            onClick={onDelete}
-            title="Delete"
+            onClick={() => setShowConfirm(true)}
+            title="Delete template"
+            aria-label="Delete template"
             style={{
               background: 'none',
               border: 'none',

@@ -8,8 +8,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SourceRegistryEntry } from '@pitchlink/shared';
 import { api } from '../../utils/api';
+import { useToastContext } from '../ToastContext';
 
 export function SourceRegistryView() {
+  const showToast = useToastContext();
   const [entries, setEntries] = useState<SourceRegistryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,8 +51,10 @@ export function SourceRegistryView() {
       setNewOriginal('');
       setNewName('');
       await loadEntries();
+      showToast('Forwarding entry added', 'success');
     } catch (err) {
       console.error('[SourceRegistry] Failed to add:', err);
+      showToast('Failed to add entry', 'error');
     }
   };
 
@@ -62,8 +66,10 @@ export function SourceRegistryView() {
       });
       setEditingId(null);
       await loadEntries();
+      showToast('Entry updated', 'success');
     } catch (err) {
       console.error('[SourceRegistry] Failed to update:', err);
+      showToast('Failed to update entry', 'error');
     }
   };
 
@@ -71,8 +77,10 @@ export function SourceRegistryView() {
     try {
       await api.iie.sourceRegistry.delete(id);
       await loadEntries();
+      showToast('Entry deleted', 'success');
     } catch (err) {
       console.error('[SourceRegistry] Failed to delete:', err);
+      showToast('Failed to delete entry', 'error');
     }
   };
 

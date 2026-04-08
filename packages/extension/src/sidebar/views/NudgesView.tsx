@@ -4,6 +4,7 @@ import type { TransactionMode, Sequence, SequenceStep, Template } from '@pitchli
 import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { Skeleton } from '../components/Skeleton';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface NudgesViewProps {
   mode: TransactionMode;
@@ -35,8 +36,9 @@ export function NudgesView({ mode }: NudgesViewProps) {
 
   const loadQueue = useCallback(async () => {
     try {
-      const res = await api.sequences.queue({ mode, limit: 50 }) as { data: QueueItem[] };
-      setQueue(res.data || []);
+      const res = await api.sequences.queue({ mode, limit: 50 }) as { data: QueueItem[] | { enrollments?: QueueItem[] } };
+      const queueData = Array.isArray(res.data) ? res.data : (res.data as { enrollments?: QueueItem[] })?.enrollments || [];
+      setQueue(queueData);
     } catch (err) {
       console.error('[NudgesView] Failed to load queue:', err);
     }
@@ -44,8 +46,9 @@ export function NudgesView({ mode }: NudgesViewProps) {
 
   const loadSequences = useCallback(async () => {
     try {
-      const res = await api.sequences.list({ mode }) as { data: { sequences: Sequence[] } };
-      setSequences(res.data.sequences || []);
+      const res = await api.sequences.list({ mode }) as { data: { sequences: Sequence[] } | Sequence[] };
+      const seqData = Array.isArray(res.data) ? res.data : (res.data as { sequences: Sequence[] })?.sequences || [];
+      setSequences(seqData);
     } catch (err) {
       console.error('[NudgesView] Failed to load sequences:', err);
     }
@@ -261,9 +264,27 @@ function SequencesList({
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   return (
     <div>
+      {/* Delete confirmation */}
+      {deletingId && (
+        <ConfirmDialog
+          message={`Delete sequence "${sequences.find(s => s.id === deletingId)?.name || ''}"?`}
+          onConfirm={async () => {
+            try {
+              await api.sequences.delete(deletingId);
+              setDeletingId(null);
+              onDeleted();
+            } catch (err) {
+              console.error('[NudgesView] Delete failed:', err);
+              setDeletingId(null);
+            }
+          }}
+          onCancel={() => setDeletingId(null)}
+        />
+      )}
       <button
         onClick={() => { setShowCreate(!showCreate); setEditingId(null); }}
         style={{
@@ -338,10 +359,7 @@ function SequencesList({
                   Edit
                 </button>
                 <button
-                  onClick={async () => {
-                    await api.sequences.delete(seq.id);
-                    onDeleted();
-                  }}
+                  onClick={() => setDeletingId(seq.id)}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -351,6 +369,7 @@ function SequencesList({
                     padding: '2px 4px',
                   }}
                   title="Delete sequence"
+                  aria-label="Delete sequence"
                 >
                   &#10005;
                 </button>
@@ -389,8 +408,9 @@ function EditSequenceForm({
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.templates.list(mode) as { data: Template[] };
-        setTemplates(res.data || []);
+        const res = await api.templates.list(mode) as { data: { templates: Template[] } | Template[] };
+        const tplData = Array.isArray(res.data) ? res.data : (res.data as { templates: Template[] })?.templates || [];
+        setTemplates(tplData);
       } catch { /* non-fatal */ }
     })();
   }, [mode]);
@@ -588,8 +608,9 @@ function CreateSequenceForm({
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.templates.list(mode) as { data: Template[] };
-        setTemplates(res.data || []);
+        const res = await api.templates.list(mode) as { data: { templates: Template[] } | Template[] };
+        const tplData = Array.isArray(res.data) ? res.data : (res.data as { templates: Template[] })?.templates || [];
+        setTemplates(tplData);
       } catch { /* non-fatal */ }
     })();
   }, [mode]);

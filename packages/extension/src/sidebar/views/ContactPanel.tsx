@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Contact, PipelinePreset, PipelineStage, TransactionMode, IIEResult, Sequence, SequenceStep } from '@pitchlink/shared';
 
 import { useModeColors } from '../hooks/useModeColors';
+import { useToastContext } from '../ToastContext';
 import { GmailAdapter, ThreadViewData } from '../../gmail-adapter/GmailAdapter';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
@@ -13,6 +14,7 @@ import { ComposePanel } from './ComposePanel';
 interface ContactPanelProps {
   thread: ThreadViewData;
   mode: TransactionMode;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 interface DealInfo {
@@ -51,7 +53,7 @@ function formatFireTime(isoDate: string): string {
   return `${relative} (${absolute})`;
 }
 
-export function ContactPanel({ thread, mode }: ContactPanelProps) {
+export function ContactPanel({ thread, mode, onNavigateToTab }: ContactPanelProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [deals, setDeals] = useState<DealInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +84,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const [showForwardPrompt, setShowForwardPrompt] = useState(false);
   const [resolvedOriginalEmail, setResolvedOriginalEmail] = useState<string | null>(null);
 
+  const showToast = useToastContext();
   const domain = GmailAdapter.extractDomain(
     resolvedOriginalEmail || thread.senderEmail,
   );
@@ -142,7 +145,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const loadSequences = useCallback(async () => {
     try {
       const res = await api.sequences.list({ mode }) as { data: { sequences: Sequence[] } };
-      setSequences(res.data.sequences || []);
+      setSequences(res.data?.sequences || []);
     } catch (err) {
       console.error('[ContactPanel] Failed to load sequences:', err);
     }
@@ -285,10 +288,11 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
   const handleStageChange = async (dealId: string, newStage: string) => {
     try {
       await api.deals.changeStage(dealId, newStage);
-      // Reload to refresh deal info
       await loadContact();
+      showToast('Stage updated', 'success');
     } catch (err) {
       console.error('[ContactPanel] Failed to change stage:', err);
+      showToast('Failed to change stage', 'error');
     }
   };
 
@@ -318,29 +322,58 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
       setSelectedSequenceId('');
       setEnrollingDealId('');
       loadEnrollments();
+      showToast('Contact enrolled in sequence', 'success');
     } catch (err) {
       console.error('[ContactPanel] Failed to enroll:', err);
+      showToast('Failed to enroll in sequence', 'error');
     }
   };
 
+  // Sequence action error state
+  const [seqActionError, setSeqActionError] = useState<string | null>(null);
+
   const handlePauseEnrollment = async (enrollmentId: string) => {
-    await api.sequences.pauseEnrollment(enrollmentId);
-    loadEnrollments();
+    setSeqActionError(null);
+    try {
+      await api.sequences.pauseEnrollment(enrollmentId);
+      loadEnrollments();
+    } catch (err) {
+      console.error('[ContactPanel] Failed to pause enrollment:', err);
+      setSeqActionError('Failed to pause sequence');
+    }
   };
 
   const handleResumeEnrollment = async (enrollmentId: string) => {
-    await api.sequences.resumeEnrollment(enrollmentId);
-    loadEnrollments();
+    setSeqActionError(null);
+    try {
+      await api.sequences.resumeEnrollment(enrollmentId);
+      loadEnrollments();
+    } catch (err) {
+      console.error('[ContactPanel] Failed to resume enrollment:', err);
+      setSeqActionError('Failed to resume sequence');
+    }
   };
 
   const handleCancelEnrollment = async (enrollmentId: string) => {
-    await api.sequences.cancelEnrollment(enrollmentId);
-    loadEnrollments();
+    setSeqActionError(null);
+    try {
+      await api.sequences.cancelEnrollment(enrollmentId);
+      loadEnrollments();
+    } catch (err) {
+      console.error('[ContactPanel] Failed to cancel enrollment:', err);
+      setSeqActionError('Failed to cancel enrollment');
+    }
   };
 
   const handleSkipStep = async (enrollmentId: string) => {
-    await api.sequences.skipStep(enrollmentId);
-    loadEnrollments();
+    setSeqActionError(null);
+    try {
+      await api.sequences.skipStep(enrollmentId);
+      loadEnrollments();
+    } catch (err) {
+      console.error('[ContactPanel] Failed to skip step:', err);
+      setSeqActionError('Failed to skip step');
+    }
   };
 
   const handleAddToCampaign = async () => {
@@ -748,45 +781,71 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
             <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Sequences
             </div>
-            {sequences.length > 0 && deals.length > 0 && !showEnroll && (
-              <button
-                onClick={() => setShowEnroll(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '11px',
-                  color: modeColors.color,
-                  cursor: 'pointer',
-                  padding: '0 4px',
-                }}
-              >
-                + Enroll
-              </button>
+            {!showEnroll && (
+              sequences.length > 0 ? (
+                <button
+                  onClick={() => {
+                    setShowEnroll(true);
+                    // Auto-select deal if only one exists
+                    if (deals.length === 1) {
+                      setEnrollingDealId(deals[0].id);
+                    }
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '11px',
+                    color: modeColors.color,
+                    cursor: 'pointer',
+                    padding: '0 4px',
+                  }}
+                >
+                  + Enroll
+                </button>
+              ) : (
+                <button
+                  onClick={() => onNavigateToTab?.('nudges')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '11px',
+                    color: modeColors.color,
+                    cursor: 'pointer',
+                    padding: '0 4px',
+                  }}
+                  title="Go to Nudges tab to create a sequence"
+                >
+                  Create one &rarr;
+                </button>
+              )
             )}
           </div>
 
           {/* Enroll form */}
           {showEnroll && (
             <div className="pl-card" style={{ padding: '8px 10px', marginBottom: '6px' }}>
-              <select
-                value={enrollingDealId}
-                onChange={(e) => setEnrollingDealId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '4px 6px',
-                  fontSize: '12px',
-                  borderRadius: '4px',
-                  border: '1px solid var(--pl-border-secondary)',
-                  backgroundColor: 'var(--pl-bg-primary)',
-                  color: 'var(--pl-text-primary)',
-                  marginBottom: '4px',
-                }}
-              >
-                <option value="">Select deal...</option>
-                {deals.map((d) => (
-                  <option key={d.id} value={d.id}>{d.campaign.name}</option>
-                ))}
-              </select>
+              {/* Only show deal selector if multiple deals */}
+              {deals.length > 1 && (
+                <select
+                  value={enrollingDealId}
+                  onChange={(e) => setEnrollingDealId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '4px 6px',
+                    fontSize: '12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--pl-border-secondary)',
+                    backgroundColor: 'var(--pl-bg-primary)',
+                    color: 'var(--pl-text-primary)',
+                    marginBottom: '4px',
+                  }}
+                >
+                  <option value="">Select campaign...</option>
+                  {deals.map((d) => (
+                    <option key={d.id} value={d.id}>{d.campaign.name}</option>
+                  ))}
+                </select>
+              )}
               <select
                 value={selectedSequenceId}
                 onChange={(e) => setSelectedSequenceId(e.target.value)}
@@ -803,7 +862,9 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
               >
                 <option value="">Select sequence...</option>
                 {sequences.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({(s.steps_json || []).length} steps)
+                  </option>
                 ))}
               </select>
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
@@ -840,6 +901,13 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
             </div>
           )}
 
+          {/* Sequence action error */}
+          {seqActionError && (
+            <div style={{ fontSize: '11px', color: 'var(--pl-error)', marginBottom: '6px' }}>
+              {seqActionError}
+            </div>
+          )}
+
           {/* Active enrollments */}
           {enrollments.filter((e) => e.status === 'active' || e.status === 'paused').map((enrollment) => {
             const totalSteps = enrollment.sequence.steps_json?.length || 0;
@@ -850,12 +918,12 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
             return (
               <div key={enrollment.id} className="pl-card" style={{
                 padding: '10px 12px', marginBottom: '6px',
-                borderLeft: `3px solid ${isActive ? '#22C55E' : 'var(--pl-warning, #F59E0B)'}`,
+                borderLeft: `3px solid ${isActive ? 'var(--pl-success, #22C55E)' : 'var(--pl-warning, #F59E0B)'}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                   <span style={{
                     display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
-                    backgroundColor: isActive ? '#22C55E' : 'var(--pl-warning, #F59E0B)',
+                    backgroundColor: isActive ? 'var(--pl-success, #22C55E)' : 'var(--pl-warning, #F59E0B)',
                     flexShrink: 0,
                   }} />
                   <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--pl-text-primary)' }}>
@@ -879,6 +947,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                   {isPaused ? (
                     <button
                       onClick={() => handleResumeEnrollment(enrollment.id)}
+                      aria-label="Resume sequence"
                       style={{
                         padding: '2px 8px', fontSize: '10px', fontWeight: 600, border: 'none',
                         borderRadius: '4px', backgroundColor: modeColors.color,
@@ -890,6 +959,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                   ) : (
                     <button
                       onClick={() => handlePauseEnrollment(enrollment.id)}
+                      aria-label="Pause sequence"
                       style={{
                         padding: '2px 8px', fontSize: '10px',
                         border: '1px solid var(--pl-border-secondary)', borderRadius: '4px',
@@ -902,6 +972,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                   {isActive && (
                     <button
                       onClick={() => handleSkipStep(enrollment.id)}
+                      aria-label="Skip current step"
                       style={{
                         padding: '2px 8px', fontSize: '10px',
                         border: '1px solid var(--pl-border-secondary)', borderRadius: '4px',
@@ -913,6 +984,7 @@ export function ContactPanel({ thread, mode }: ContactPanelProps) {
                   )}
                   <button
                     onClick={() => handleCancelEnrollment(enrollment.id)}
+                    aria-label="Cancel enrollment"
                     style={{
                       padding: '2px 8px', fontSize: '10px',
                       border: '1px solid var(--pl-border-secondary)', borderRadius: '4px',

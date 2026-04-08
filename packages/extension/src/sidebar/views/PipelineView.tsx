@@ -234,9 +234,18 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
                   }}
                 >
                   <div
-                    style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                    className="pl-clickable-row"
+                    style={{ flex: 1, minWidth: 0 }}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       window.location.hash = `#search/from:${deal.contact.email}+OR+to:${deal.contact.email}`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        window.location.hash = `#search/from:${deal.contact.email}+OR+to:${deal.contact.email}`;
+                      }
                     }}
                     title={`Search emails with ${deal.contact.email}`}
                   >
@@ -254,6 +263,7 @@ export function PipelineView({ mode, activeCampaignId, onSelectCampaign }: Pipel
                     <button
                       onClick={() => handleStageChange(deal.id, nextStage.id)}
                       title={`Move to ${nextStage.name}`}
+                      aria-label={`Advance ${deal.contact.name || deal.contact.email} to ${nextStage.name}`}
                       style={{
                         background: 'none',
                         border: 'none',

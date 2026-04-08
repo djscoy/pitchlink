@@ -117,7 +117,7 @@ export function MyEmailsView({ onEmailsChanged }: MyEmailsViewProps = {}) {
         <div
           style={{
             fontSize: '11px',
-            color: statusMessage.includes('Failed') ? '#ef4444' : '#22c55e',
+            color: statusMessage.includes('Failed') ? 'var(--pl-error)' : 'var(--pl-success)',
             marginBottom: '6px',
           }}
         >
@@ -204,8 +204,8 @@ export function MyEmailsView({ onEmailsChanged }: MyEmailsViewProps = {}) {
               marginTop: '4px',
               border: 'none',
               borderRadius: '4px',
-              backgroundColor: '#2563eb',
-              color: '#fff',
+              backgroundColor: 'var(--pl-info)',
+              color: 'var(--pl-text-inverse)',
               cursor: 'pointer',
             }}
           >

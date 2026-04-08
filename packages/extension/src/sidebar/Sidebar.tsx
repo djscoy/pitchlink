@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { GmailAdapter, ThreadViewData } from '../gmail-adapter/GmailAdapter';
 import { useTheme } from './ThemeProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastContainer } from './components/Toast';
 import { ContactPanel } from './views/ContactPanel';
 import { PipelineView } from './views/PipelineView';
 import { DashboardView } from './views/DashboardView';
@@ -18,6 +19,8 @@ import { MODE_CONFIG, TRANSACTION_MODES, SIDEBAR, APP_CONFIG } from '@pitchlink/
 import type { TransactionMode } from '@pitchlink/shared';
 import { useModeColors } from './hooks/useModeColors';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useToast } from './hooks/useToast';
+import { ToastContext } from './ToastContext';
 import { api } from '../utils/api';
 
 interface SidebarProps {
@@ -39,6 +42,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [settingsTab, setSettingsTab] = useState<'auto-reply' | 'my-emails' | 'source-registry'>('auto-reply');
   const [userEmailsVersion, setUserEmailsVersion] = useState(0);
   const [replyCount, setReplyCount] = useState(0);
+  const { toasts, showToast, dismissToast } = useToast();
 
   // Check onboarding status on mount
   useEffect(() => {
@@ -118,6 +122,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   useKeyboardShortcuts(shortcuts);
 
   return (
+    <ToastContext.Provider value={showToast}>
     <div className="pl-sidebar" style={{ minHeight: '100%' }}>
       {/* Top Bar */}
       <div
@@ -367,7 +372,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           </ErrorBoundary>
         ) : currentThread ? (
           <ErrorBoundary section="contact-panel">
-            <ContactPanel thread={currentThread} mode={activeMode} />
+            <ContactPanel thread={currentThread} mode={activeMode} onNavigateToTab={(tab) => { setCurrentThread(null); setActiveTab(tab as SidebarTab); }} />
           </ErrorBoundary>
         ) : (
           <>
@@ -413,6 +418,8 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           </>
         )}
       </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
+    </ToastContext.Provider>
   );
 }

@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { AutoReplyRule, AutoReplyQueueItem, Template } from '@pitchlink/shared';
 import { api } from '../../utils/api';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface CampaignOption {
   id: string;
@@ -30,6 +31,7 @@ export function AutoReplySettingsView() {
   const [newDelay, setNewDelay] = useState(10);
   const [newMatchType, setNewMatchType] = useState<'ai_classify' | 'all_new'>('ai_classify');
   const [creating, setCreating] = useState(false);
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -123,10 +125,10 @@ export function AutoReplySettingsView() {
               padding: '5px',
               fontSize: '11px',
               fontWeight: viewMode === v ? 600 : 400,
-              border: viewMode === v ? '1px solid #059669' : '1px solid var(--pl-border-secondary)',
+              border: viewMode === v ? '1px solid var(--pl-success)' : '1px solid var(--pl-border-secondary)',
               borderRadius: '4px',
-              backgroundColor: viewMode === v ? '#059669' : 'transparent',
-              color: viewMode === v ? '#fff' : 'var(--pl-text-secondary)',
+              backgroundColor: viewMode === v ? 'var(--pl-success)' : 'transparent',
+              color: viewMode === v ? 'var(--pl-text-inverse)' : 'var(--pl-text-secondary)',
               cursor: 'pointer',
               textTransform: 'capitalize',
             }}
@@ -146,10 +148,10 @@ export function AutoReplySettingsView() {
               padding: '6px',
               fontSize: '11px',
               fontWeight: 600,
-              border: '1px dashed #059669',
+              border: '1px dashed var(--pl-success)',
               borderRadius: '4px',
               backgroundColor: 'transparent',
-              color: '#059669',
+              color: 'var(--pl-success)',
               cursor: 'pointer',
               marginBottom: '8px',
             }}
@@ -159,7 +161,7 @@ export function AutoReplySettingsView() {
 
           {/* Create form */}
           {showCreate && (
-            <div className="pl-card" style={{ marginBottom: '8px', borderColor: '#059669' }}>
+            <div className="pl-card" style={{ marginBottom: '8px', borderColor: 'var(--pl-success)' }}>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--pl-text-tertiary)', marginBottom: '6px' }}>
                 Template
               </div>
@@ -283,8 +285,8 @@ export function AutoReplySettingsView() {
                     fontWeight: 600,
                     border: 'none',
                     borderRadius: '4px',
-                    backgroundColor: newTemplateId && !creating ? '#059669' : 'var(--pl-bg-tertiary)',
-                    color: newTemplateId && !creating ? '#fff' : 'var(--pl-text-tertiary)',
+                    backgroundColor: newTemplateId && !creating ? 'var(--pl-success)' : 'var(--pl-bg-tertiary)',
+                    color: newTemplateId && !creating ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
                     cursor: newTemplateId && !creating ? 'pointer' : 'not-allowed',
                   }}
                 >
@@ -292,6 +294,15 @@ export function AutoReplySettingsView() {
                 </button>
               </div>
             </div>
+          )}
+
+          {/* Delete confirmation */}
+          {deletingRuleId && (
+            <ConfirmDialog
+              message="Delete this auto-reply rule?"
+              onConfirm={() => { handleDelete(deletingRuleId); setDeletingRuleId(null); }}
+              onCancel={() => setDeletingRuleId(null)}
+            />
           )}
 
           {/* Rules list */}
@@ -315,15 +326,16 @@ export function AutoReplySettingsView() {
                       padding: '2px 6px',
                       borderRadius: '4px',
                       border: 'none',
-                      backgroundColor: rule.is_enabled ? '#059669' : 'var(--pl-bg-tertiary)',
-                      color: rule.is_enabled ? '#fff' : 'var(--pl-text-tertiary)',
+                      backgroundColor: rule.is_enabled ? 'var(--pl-success)' : 'var(--pl-bg-tertiary)',
+                      color: rule.is_enabled ? 'var(--pl-text-inverse)' : 'var(--pl-text-tertiary)',
                       cursor: 'pointer',
                     }}
                   >
                     {rule.is_enabled ? 'ON' : 'OFF'}
                   </button>
                   <button
-                    onClick={() => handleDelete(rule.id)}
+                    onClick={() => setDeletingRuleId(rule.id)}
+                    aria-label="Delete rule"
                     style={{
                       background: 'none',
                       border: 'none',
@@ -386,12 +398,12 @@ export function AutoReplySettingsView() {
                       borderRadius: '3px',
                       fontWeight: 600,
                       backgroundColor:
-                        item.status === 'pending' ? '#F59E0B' :
-                        item.status === 'sent' ? '#059669' :
-                        item.status === 'drafted' ? '#2563EB' :
+                        item.status === 'pending' ? 'var(--pl-warning)' :
+                        item.status === 'sent' ? 'var(--pl-success)' :
+                        item.status === 'drafted' ? 'var(--pl-info)' :
                         item.status === 'skipped' ? 'var(--pl-bg-tertiary)' :
-                        '#EF4444',
-                      color: item.status === 'skipped' ? 'var(--pl-text-tertiary)' : '#fff',
+                        'var(--pl-error)',
+                      color: item.status === 'skipped' ? 'var(--pl-text-tertiary)' : 'var(--pl-text-inverse)',
                     }}>
                       {item.status}
                     </span>
