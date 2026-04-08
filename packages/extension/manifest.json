@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PitchLink",
   "description": "Gmail-native outreach CRM — manage your pipeline, contacts, and sequences without leaving your inbox.",
-  "version": "0.1.0",
+  "version": "0.10.0",
   "permissions": [
     "identity",
     "storage",

@@ -7,6 +7,6 @@ healthRouter.get('/health', (_req, res) => {
     status: 'ok',
     service: 'pitchlink-api',
     timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || '0.1.0',
+    version: process.env.npm_package_version || '0.10.0',
   });
 });
