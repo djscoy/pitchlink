@@ -141,17 +141,22 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           zIndex: 5,
         }}
       >
-        {/* Wordmark */}
-        <span
-          style={{
-            fontWeight: 700,
-            fontSize: '14px',
-            color: 'var(--pl-text-primary)',
-            letterSpacing: '-0.3px',
+        {/* Wordmark — home button */}
+        <button
+          type="button"
+          className="pl-wordmark-home"
+          onClick={() => {
+            setActiveTab('pipeline');
+            setActiveCampaignId(null);
+            setShowSettings(false);
+            setShowBulkAssign(false);
+            setShowOnboarding(false);
           }}
+          title="Go to dashboard"
+          aria-label={`${APP_CONFIG.APP_NAME} — go to dashboard`}
         >
           {APP_CONFIG.APP_NAME}
-        </span>
+        </button>
 
         {/* Mode Pills */}
         <div style={{ display: 'flex', gap: '4px' }}>
@@ -439,6 +444,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                     onNavigateToCampaign={(id) => {
                       setActiveCampaignId(id);
                     }}
+                    onNavigateToTab={(tab) => setActiveTab(tab)}
                     onBulkAssign={() => setShowBulkAssign(true)}
                   />
                 )}

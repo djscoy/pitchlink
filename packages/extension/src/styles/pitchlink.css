@@ -282,6 +282,46 @@
   background-color: var(--pl-bg-secondary);
 }
 
+/* Clickable metric tile (dashboard stats) */
+.pl-metric-card-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.pl-metric-card-clickable:hover {
+  box-shadow: var(--pl-shadow-sm);
+  border-color: var(--pl-border-secondary);
+}
+
+.pl-metric-card-clickable:focus-visible {
+  outline: 2px solid var(--pl-info);
+  outline-offset: 1px;
+}
+
+/* Wordmark home button */
+.pl-wordmark-home {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--pl-text-primary);
+  letter-spacing: -0.3px;
+  transition: opacity 0.15s ease;
+}
+
+.pl-wordmark-home:hover {
+  opacity: 0.7;
+}
+
+.pl-wordmark-home:focus-visible {
+  outline: 2px solid var(--pl-info);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* Timeline items */
 .pl-timeline-item {
   display: flex;
