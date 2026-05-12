@@ -4,6 +4,7 @@ import { MODE_CONFIG } from '@pitchlink/shared';
 import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { CampaignCardSkeleton } from '../components/Skeleton';
+import { useToastContext } from '../ToastContext';
 
 interface DashboardViewProps {
   mode: TransactionMode;
@@ -298,6 +299,7 @@ function CreateCampaignForm({
   const [presets, setPresets] = useState<PipelinePreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [creating, setCreating] = useState(false);
+  const showToast = useToastContext();
 
   useEffect(() => {
     async function load() {
@@ -323,9 +325,11 @@ function CreateCampaignForm({
         mode,
         pipeline_preset_id: selectedPresetId,
       });
+      showToast('Campaign created', 'success');
       onCreated();
     } catch (err) {
       console.error('[CreateCampaign] Failed to create:', err);
+      showToast('Failed to create campaign', 'error');
     } finally {
       setCreating(false);
     }

@@ -3,6 +3,7 @@ import type { TransactionMode } from '@pitchlink/shared';
 import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { Skeleton } from '../components/Skeleton';
+import { useToastContext } from '../ToastContext';
 
 interface HistoryViewProps {
   mode: TransactionMode;
@@ -45,8 +46,9 @@ export function HistoryView({ mode }: HistoryViewProps) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const modeColors = useModeColors(mode);
+  const showToast = useToastContext();
 
-  const loadActivities = useCallback(async (offset = 0, append = false) => {
+  const loadActivities = useCallback(async (offset = 0, append = false): Promise<boolean> => {
     try {
       const result = await api.deals.getGlobalActivities({
         mode,
@@ -60,8 +62,10 @@ export function HistoryView({ mode }: HistoryViewProps) {
         setActivities(result.data.activities);
       }
       setTotal(result.data.total);
+      return true;
     } catch (err) {
       console.error('[HistoryView] Failed to load activities:', err);
+      return false;
     }
   }, [mode]);
 
@@ -72,8 +76,12 @@ export function HistoryView({ mode }: HistoryViewProps) {
 
   const handleLoadMore = async () => {
     setLoadingMore(true);
-    await loadActivities(activities.length, true);
-    setLoadingMore(false);
+    try {
+      const ok = await loadActivities(activities.length, true);
+      if (!ok) showToast('Failed to load more activity', 'error');
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   if (loading) {

@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { AutoReplyRule, AutoReplyQueueItem, Template } from '@pitchlink/shared';
 import { api } from '../../utils/api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useToastContext } from '../ToastContext';
 
 interface CampaignOption {
   id: string;
@@ -32,6 +33,7 @@ export function AutoReplySettingsView() {
   const [newMatchType, setNewMatchType] = useState<'ai_classify' | 'all_new'>('ai_classify');
   const [creating, setCreating] = useState(false);
   const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
+  const showToast = useToastContext();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -69,32 +71,58 @@ export function AutoReplySettingsView() {
       setShowCreate(false);
       setNewTemplateId('');
       setNewCampaignId('');
+      showToast('Auto-reply rule created', 'success');
       loadData();
     } catch (err) {
       console.error('[AutoReplySettings] Create failed:', err);
+      showToast('Failed to create rule', 'error');
     } finally {
       setCreating(false);
     }
   };
 
   const handleToggle = async (rule: AutoReplyRule) => {
-    await api.autoReply.updateRule(rule.id, { is_enabled: !rule.is_enabled });
-    loadData();
+    try {
+      await api.autoReply.updateRule(rule.id, { is_enabled: !rule.is_enabled });
+      showToast(rule.is_enabled ? 'Rule disabled' : 'Rule enabled', 'success');
+      loadData();
+    } catch (err) {
+      console.error('[AutoReplySettings] Toggle failed:', err);
+      showToast('Failed to update rule', 'error');
+    }
   };
 
   const handleModeChange = async (rule: AutoReplyRule, mode: string) => {
-    await api.autoReply.updateRule(rule.id, { mode });
-    loadData();
+    try {
+      await api.autoReply.updateRule(rule.id, { mode });
+      showToast(`Switched to ${mode === 'auto_send' ? 'Auto-Send' : 'Draft Hold'}`, 'success');
+      loadData();
+    } catch (err) {
+      console.error('[AutoReplySettings] Mode change failed:', err);
+      showToast('Failed to switch mode', 'error');
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await api.autoReply.deleteRule(id);
-    loadData();
+    try {
+      await api.autoReply.deleteRule(id);
+      showToast('Rule deleted', 'success');
+      loadData();
+    } catch (err) {
+      console.error('[AutoReplySettings] Delete failed:', err);
+      showToast('Failed to delete rule', 'error');
+    }
   };
 
   const handleSkip = async (id: string) => {
-    await api.autoReply.skipQueueItem(id);
-    loadData();
+    try {
+      await api.autoReply.skipQueueItem(id);
+      showToast('Item skipped', 'success');
+      loadData();
+    } catch (err) {
+      console.error('[AutoReplySettings] Skip failed:', err);
+      showToast('Failed to skip item', 'error');
+    }
   };
 
   if (loading) {
