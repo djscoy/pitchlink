@@ -84,14 +84,22 @@ export function ContactPanel({ thread, mode, onNavigateToTab }: ContactPanelProp
   const [showForwardPrompt, setShowForwardPrompt] = useState(false);
   const [resolvedOriginalEmail, setResolvedOriginalEmail] = useState<string | null>(null);
 
-  const showToast = useToastContext();
-  const domain = GmailAdapter.extractDomain(
-    resolvedOriginalEmail || thread.senderEmail,
-  );
-  const modeColors = useModeColors(mode);
+  // Manual contact-override state — lets the user pick the correct participant
+  // when IIE picks the wrong one (e.g. flags Scott's own address as the contact).
+  const [manualOverrideEmail, setManualOverrideEmail] = useState<string | null>(null);
+  const [showParticipantPicker, setShowParticipantPicker] = useState(false);
 
-  // Determine which email to display/lookup — original sender if forward resolved
-  const displayEmail = resolvedOriginalEmail || thread.senderEmail;
+  // Reset overrides when the thread changes
+  useEffect(() => {
+    setManualOverrideEmail(null);
+    setShowParticipantPicker(false);
+  }, [thread.threadId]);
+
+  const showToast = useToastContext();
+  // Manual override wins over IIE-resolved over default-sender
+  const displayEmail = manualOverrideEmail || resolvedOriginalEmail || thread.senderEmail;
+  const domain = GmailAdapter.extractDomain(displayEmail);
+  const modeColors = useModeColors(mode);
 
   const loadContact = useCallback(async () => {
     setLoading(true);
@@ -409,6 +417,100 @@ export function ContactPanel({ thread, mode, onNavigateToTab }: ContactPanelProp
 
   if (loading) return <ContactCardSkeleton />;
 
+  // --- Wrong-contact picker (manual override) ---
+  // Shows a small "Wrong contact?" link + dropdown listing every non-owned
+  // participant in the current thread. Picking one re-runs the contact lookup
+  // against that email. Useful when IIE flags Scott's own address (Mark, etc.)
+  // as the contact, or when a forwarded thread surfaces the wrong external party.
+  const participants = thread.participants || [];
+  const contactOverridePicker = participants.length > 0 ? (
+    <div style={{ marginTop: '6px' }}>
+      <button
+        onClick={() => setShowParticipantPicker((v) => !v)}
+        style={{
+          fontSize: '10px',
+          color: 'var(--pl-text-tertiary)',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          textDecoration: 'underline',
+          padding: 0,
+        }}
+        title="Pick a different participant from this thread as the contact"
+      >
+        {showParticipantPicker ? '× Cancel' : '↻ Wrong contact?'}
+      </button>
+      {showParticipantPicker && (
+        <div
+          style={{
+            marginTop: '6px',
+            padding: '8px',
+            borderRadius: '4px',
+            backgroundColor: 'var(--pl-bg-primary)',
+            border: '1px solid var(--pl-border-secondary)',
+            textAlign: 'left',
+          }}
+        >
+          <div style={{ fontSize: '10px', color: 'var(--pl-text-tertiary)', marginBottom: '6px' }}>
+            Pick the correct contact from this thread:
+          </div>
+          {participants.map((p) => {
+            const isCurrent = p.email.toLowerCase() === displayEmail.toLowerCase();
+            return (
+              <button
+                key={p.email}
+                onClick={() => {
+                  if (isCurrent) return;
+                  setManualOverrideEmail(p.email);
+                  setShowParticipantPicker(false);
+                  showToast(`Contact switched to ${p.email}`, 'success');
+                }}
+                disabled={isCurrent}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '5px 6px',
+                  fontSize: '11px',
+                  textAlign: 'left',
+                  background: isCurrent ? 'var(--pl-bg-secondary)' : 'transparent',
+                  border: '1px solid var(--pl-border-secondary)',
+                  borderRadius: '4px',
+                  marginBottom: '4px',
+                  cursor: isCurrent ? 'default' : 'pointer',
+                  color: 'var(--pl-text-primary)',
+                  opacity: isCurrent ? 0.6 : 1,
+                }}
+              >
+                {p.name ? `${p.name} <${p.email}>` : p.email}
+                {isCurrent ? '  (current)' : ''}
+              </button>
+            );
+          })}
+          {manualOverrideEmail && (
+            <button
+              onClick={() => {
+                setManualOverrideEmail(null);
+                setShowParticipantPicker(false);
+                showToast('Reverted to auto-detected contact', 'info');
+              }}
+              style={{
+                fontSize: '10px',
+                background: 'none',
+                border: 'none',
+                color: 'var(--pl-text-tertiary)',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: '2px 0 0 0',
+              }}
+            >
+              Revert to auto-detected
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   // --- Forward Prompt (Layer 4) ---
   const forwardBanner = showForwardPrompt ? (
     <ForwardPrompt
@@ -474,6 +576,7 @@ export function ContactPanel({ thread, mode, onNavigateToTab }: ContactPanelProp
           >
             + Add to PitchLink
           </button>
+          {contactOverridePicker}
         </div>
       </div>
     );
@@ -522,6 +625,7 @@ export function ContactPanel({ thread, mode, onNavigateToTab }: ContactPanelProp
                 {contact.domain}
               </div>
             )}
+            {contactOverridePicker}
           </div>
 
           <button
@@ -711,11 +815,17 @@ export function ContactPanel({ thread, mode, onNavigateToTab }: ContactPanelProp
               }}
             >
               <option value="">Select campaign...</option>
-              {campaigns
-                .filter((c) => !deals.some((d) => d.campaign.id === c.id))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+              {campaigns.map((c) => {
+                const alreadyIn = deals.some((d) => d.campaign.id === c.id);
+                return (
+                  <option key={c.id} value={c.id} disabled={alreadyIn}>
+                    {c.name}{alreadyIn ? ' — already added' : ''}
+                  </option>
+                );
+              })}
+              {campaigns.length === 0 && (
+                <option value="" disabled>No {mode} campaigns yet — create one from the Pipeline tab</option>
+              )}
             </select>
             <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
               <button

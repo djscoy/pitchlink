@@ -52,6 +52,12 @@ chrome.runtime.onMessage.addListener(
         });
         return true;
 
+      case 'SIGN_OUT_AND_REAUTH':
+        handleSignOutAndReauth().then(sendResponse).catch((err) => {
+          sendResponse({ error: err.message });
+        });
+        return true;
+
       case 'HEALTH_CHECK':
         sendResponse({ status: 'ok', timestamp: Date.now() });
         return false;
@@ -175,6 +181,69 @@ async function handleRegisterGmailWatch(): Promise<{ success: boolean } | { erro
 
   console.log('[PitchLink BG] Gmail watch registered successfully');
   return { success: true };
+}
+
+/**
+ * Sign out the current Google account and trigger a fresh interactive auth.
+ * Clears the cached chrome.identity token, revokes it server-side at Google,
+ * then forces Google's account picker so the user can choose a different account.
+ * On success, re-registers the Gmail watch under the new account.
+ */
+async function handleSignOutAndReauth(): Promise<{ email?: string; error?: string }> {
+  // 1. Get the currently cached token (so we know what to revoke)
+  const current = await handleGetAuthToken(false);
+  const currentToken = 'token' in current ? current.token : null;
+
+  // 2. Clear the local cache + revoke at Google
+  if (currentToken) {
+    await new Promise<void>((resolve) => {
+      chrome.identity.removeCachedAuthToken({ token: currentToken }, () => resolve());
+    });
+    // Revoke the token server-side so Google forgets the grant — without this,
+    // getAuthToken would silently hand back the same token for the same account.
+    try {
+      await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${encodeURIComponent(currentToken)}`);
+    } catch {
+      // Non-fatal — local cache clear is enough to force the account picker
+    }
+  }
+
+  // 3. Interactive auth — Google shows the account picker since cache is empty
+  const next = await handleGetAuthToken(true);
+  if ('error' in next) {
+    return { error: next.error };
+  }
+
+  // 4. Get user info for the new token and re-register the watch
+  const userInfoResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: `Bearer ${next.token}` },
+  });
+  if (!userInfoResp.ok) {
+    return { error: 'Failed to fetch user info for new account' };
+  }
+  const userInfo = await userInfoResp.json();
+
+  const callbackResp = await fetch(`${API_BASE}/auth/google-callback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${next.token}`,
+    },
+    body: JSON.stringify({
+      google_id: userInfo.sub,
+      email: userInfo.email,
+      name: userInfo.name,
+      avatar_url: userInfo.picture,
+      access_token: next.token,
+    }),
+  });
+  if (!callbackResp.ok) {
+    const err = await callbackResp.json().catch(() => ({ error: { message: 'Unknown error' } }));
+    return { error: err.error?.message || 'Re-registration failed' };
+  }
+
+  console.log('[PitchLink BG] Signed in as', userInfo.email);
+  return { email: userInfo.email };
 }
 
 /**

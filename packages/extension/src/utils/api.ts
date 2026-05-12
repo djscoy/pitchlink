@@ -46,6 +46,31 @@ export async function apiRequest<T>(
   });
 }
 
+/**
+ * Sign out the current Google account and force a fresh interactive auth flow.
+ * Returns the email of the newly-authenticated account on success.
+ */
+export async function signOutAndReauth(): Promise<{ email: string }> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Sign-out request timed out'));
+    }, 60000); // Interactive flow may take a while
+
+    chrome.runtime.sendMessage({ type: 'SIGN_OUT_AND_REAUTH' }, (response) => {
+      clearTimeout(timeout);
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (response?.error) {
+        reject(new Error(response.error));
+        return;
+      }
+      resolve({ email: response.email });
+    });
+  });
+}
+
 // --- Typed API helpers ---
 
 export const api = {

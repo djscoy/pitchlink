@@ -5,6 +5,7 @@ import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { Skeleton } from '../components/Skeleton';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useToastContext } from '../ToastContext';
 
 interface NudgesViewProps {
   mode: TransactionMode;
@@ -33,6 +34,7 @@ export function NudgesView({ mode }: NudgesViewProps) {
   const [loading, setLoading] = useState(true);
 
   const modeColors = useModeColors(mode);
+  const showToast = useToastContext();
 
   const loadQueue = useCallback(async () => {
     try {
@@ -60,18 +62,36 @@ export function NudgesView({ mode }: NudgesViewProps) {
   }, [loadQueue, loadSequences]);
 
   const handlePause = async (enrollmentId: string) => {
-    await api.sequences.pauseEnrollment(enrollmentId);
-    loadQueue();
+    try {
+      await api.sequences.pauseEnrollment(enrollmentId);
+      showToast('Sequence paused', 'success');
+      loadQueue();
+    } catch (err) {
+      console.error('[NudgesView] Pause failed:', err);
+      showToast('Failed to pause sequence', 'error');
+    }
   };
 
   const handleResume = async (enrollmentId: string) => {
-    await api.sequences.resumeEnrollment(enrollmentId);
-    loadQueue();
+    try {
+      await api.sequences.resumeEnrollment(enrollmentId);
+      showToast('Sequence resumed', 'success');
+      loadQueue();
+    } catch (err) {
+      console.error('[NudgesView] Resume failed:', err);
+      showToast('Failed to resume sequence', 'error');
+    }
   };
 
   const handleCancel = async (enrollmentId: string) => {
-    await api.sequences.cancelEnrollment(enrollmentId);
-    loadQueue();
+    try {
+      await api.sequences.cancelEnrollment(enrollmentId);
+      showToast('Sequence cancelled', 'success');
+      loadQueue();
+    } catch (err) {
+      console.error('[NudgesView] Cancel failed:', err);
+      showToast('Failed to cancel sequence', 'error');
+    }
   };
 
   if (loading) {
@@ -265,6 +285,7 @@ function SequencesList({
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const showToast = useToastContext();
 
   return (
     <div>
@@ -276,10 +297,12 @@ function SequencesList({
             try {
               await api.sequences.delete(deletingId);
               setDeletingId(null);
+              showToast('Sequence deleted', 'success');
               onDeleted();
             } catch (err) {
               console.error('[NudgesView] Delete failed:', err);
               setDeletingId(null);
+              showToast('Failed to delete sequence', 'error');
             }
           }}
           onCancel={() => setDeletingId(null)}
@@ -404,6 +427,7 @@ function EditSequenceForm({
   );
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const showToast = useToastContext();
 
   useEffect(() => {
     (async () => {
@@ -443,9 +467,11 @@ function EditSequenceForm({
         template_id: s.template_id,
       }));
       await api.sequences.update(sequence.id, { name: name.trim(), steps_json: stepsJson });
+      showToast('Sequence updated', 'success');
       onSaved();
     } catch (err) {
       console.error('[NudgesView] Update failed:', err);
+      showToast('Failed to update sequence', 'error');
     } finally {
       setSaving(false);
     }
@@ -604,6 +630,7 @@ function CreateSequenceForm({
   ]);
   const [creating, setCreating] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const showToast = useToastContext();
 
   useEffect(() => {
     (async () => {
@@ -644,9 +671,11 @@ function CreateSequenceForm({
       }));
 
       await api.sequences.create({ name: name.trim(), mode, steps_json: stepsJson });
+      showToast('Sequence created', 'success');
       onCreated();
     } catch (err) {
       console.error('[NudgesView] Create failed:', err);
+      showToast('Failed to create sequence', 'error');
     } finally {
       setCreating(false);
     }

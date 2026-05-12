@@ -7,6 +7,11 @@
 
 type ThreadViewHandler = (data: ThreadViewData | null) => void;
 
+export interface ThreadParticipant {
+  email: string;
+  name: string;
+}
+
 export interface ThreadViewData {
   threadId: string;
   messageId: string;
@@ -14,6 +19,8 @@ export interface ThreadViewData {
   senderName: string;
   subject: string;
   messageCount: number;
+  /** All unique non-owned participants across the thread (senders + recipients). Used by the contact-override picker. */
+  participants: ThreadParticipant[];
 }
 
 export class GmailAdapter {
@@ -79,6 +86,7 @@ export class GmailAdapter {
         senderName: sender?.name || '',
         subject: threadView.getSubject?.() || '',
         messageCount: messageViews.length,
+        participants: this.collectParticipants(messageViews),
       };
 
       // Resolve thread ID and message ID async (InboxSDK deprecated sync versions)
@@ -183,6 +191,36 @@ export class GmailAdapter {
     }
 
     return null;
+  }
+
+  /**
+   * Collect every unique non-owned participant across all messages in a thread —
+   * union of senders and recipients (to, cc). Used to power the "Wrong contact?"
+   * override picker when IIE picks the wrong address.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private collectParticipants(messageViews: any[]): ThreadParticipant[] {
+    const seen = new Map<string, ThreadParticipant>();
+
+    const add = (p?: { emailAddress?: string; name?: string } | null) => {
+      if (!p?.emailAddress) return;
+      const email = p.emailAddress.toLowerCase();
+      if (this.userEmails.has(email)) return;
+      if (seen.has(email)) return;
+      seen.set(email, { email, name: p.name || '' });
+    };
+
+    for (const mv of messageViews) {
+      try {
+        add(mv.getSender?.());
+      } catch { /* message DOM not loaded */ }
+      try {
+        const recipients = mv.getRecipientsFull?.() || mv.getRecipients?.() || [];
+        for (const r of recipients) add(r);
+      } catch { /* recipients not available */ }
+    }
+
+    return Array.from(seen.values());
   }
 
   /**

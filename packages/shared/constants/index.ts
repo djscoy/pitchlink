@@ -28,7 +28,7 @@ export const MODE_CONFIG: Record<
   },
 };
 
-export const TRANSACTION_MODES: TransactionMode[] = ['buy', 'sell', 'exchange'];
+export const TRANSACTION_MODES: TransactionMode[] = ['sell', 'buy', 'exchange'];
 
 // ============================================================
 // Pipeline Presets

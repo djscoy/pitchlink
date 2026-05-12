@@ -4,6 +4,7 @@ import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useToastContext } from '../ToastContext';
 
 interface TemplatePanelProps {
   mode: TransactionMode;
@@ -23,6 +24,7 @@ export function TemplatePanel({ mode, onInsert, contactContext }: TemplatePanelP
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const modeColors = useModeColors(mode);
+  const showToast = useToastContext();
 
   const loadTemplates = useCallback(async () => {
     setLoading(true);
@@ -44,8 +46,10 @@ export function TemplatePanel({ mode, onInsert, contactContext }: TemplatePanelP
     try {
       await api.templates.delete(id);
       setTemplates((prev) => prev.filter((t) => t.id !== id));
+      showToast('Template deleted', 'success');
     } catch (err) {
       console.error('[TemplatePanel] Delete failed:', err);
+      showToast('Failed to delete template', 'error');
     }
   };
 
@@ -292,6 +296,7 @@ function TemplateForm({
   const [saving, setSaving] = useState(false);
 
   const modeColors = useModeColors(mode);
+  const showToast = useToastContext();
   const isEdit = !!template;
 
   const handleSave = async () => {
@@ -300,12 +305,15 @@ function TemplateForm({
     try {
       if (isEdit) {
         await api.templates.update(template.id, { name, subject, body_html: bodyHtml });
+        showToast('Template updated', 'success');
       } else {
         await api.templates.create({ name, mode, subject, body_html: bodyHtml });
+        showToast('Template created', 'success');
       }
       onSaved();
     } catch (err) {
       console.error('[TemplateForm] Save failed:', err);
+      showToast(isEdit ? 'Failed to update template' : 'Failed to create template', 'error');
     } finally {
       setSaving(false);
     }
