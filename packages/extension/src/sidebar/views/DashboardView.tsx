@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { KeyboardEvent } from 'react';
 import type { TransactionMode, PipelinePreset, PipelineStage } from '@pitchlink/shared';
 import { MODE_CONFIG } from '@pitchlink/shared';
 import { useModeColors } from '../hooks/useModeColors';
@@ -9,6 +10,7 @@ import { useToastContext } from '../ToastContext';
 interface DashboardViewProps {
   mode: TransactionMode;
   onNavigateToCampaign: (campaignId: string) => void;
+  onNavigateToTab: (tab: 'pipeline' | 'history' | 'nudges') => void;
   onBulkAssign?: () => void;
 }
 
@@ -31,7 +33,7 @@ interface DashboardStats {
   enriched_contacts: number;
 }
 
-export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: DashboardViewProps) {
+export function DashboardView({ mode, onNavigateToCampaign, onNavigateToTab, onBulkAssign }: DashboardViewProps) {
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -146,12 +148,49 @@ export function DashboardView({ mode, onNavigateToCampaign, onBulkAssign }: Dash
           gap: '6px',
           marginBottom: '12px',
         }}>
-          <MetricCard label="Contacts" value={stats.total_contacts} color="var(--pl-text-primary)" />
-          <MetricCard label="Deals" value={stats.total_deals} color={modeColors.color} />
-          <MetricCard label="Replies" value={stats.recent_replies} subtitle="30d" color="var(--pl-success)" />
-          <MetricCard label="Sequences" value={stats.active_enrollments} color="var(--pl-text-secondary)" />
-          <MetricCard label="Enriched" value={stats.enriched_contacts} color="var(--pl-text-secondary)" />
-          <MetricCard label="Campaigns" value={stats.active_campaigns} color="var(--pl-text-secondary)" />
+          <MetricCard
+            label="Contacts"
+            value={stats.total_contacts}
+            color="var(--pl-text-primary)"
+            onClick={() => { window.location.hash = '#all'; }}
+            title="Open Gmail All Mail"
+          />
+          <MetricCard
+            label="Deals"
+            value={stats.total_deals}
+            color={modeColors.color}
+            onClick={() => onNavigateToTab('pipeline')}
+            title="Go to pipeline"
+          />
+          <MetricCard
+            label="Replies"
+            value={stats.recent_replies}
+            subtitle="30d"
+            color="var(--pl-success)"
+            onClick={() => onNavigateToTab('history')}
+            title="View recent replies in History"
+          />
+          <MetricCard
+            label="Sequences"
+            value={stats.active_enrollments}
+            color="var(--pl-text-secondary)"
+            onClick={() => onNavigateToTab('nudges')}
+            title="View active sequences in Nudges"
+          />
+          <MetricCard
+            label="Enriched"
+            value={stats.enriched_contacts}
+            color="var(--pl-text-secondary)"
+            onClick={() => onNavigateToTab('history')}
+            title="View enrichment activity in History"
+          />
+          <MetricCard
+            label="Campaigns"
+            value={stats.active_campaigns}
+            color="var(--pl-text-secondary)"
+            onClick={() => onNavigateToTab('pipeline')}
+            title="Go to pipeline"
+          />
         </div>
       )}
 
@@ -428,9 +467,38 @@ function CreateCampaignForm({
 
 // --- Metric Card ---
 
-function MetricCard({ label, value, subtitle, color }: { label: string; value: number; subtitle?: string; color: string }) {
+function MetricCard({
+  label,
+  value,
+  subtitle,
+  color,
+  onClick,
+  title,
+}: {
+  label: string;
+  value: number;
+  subtitle?: string;
+  color: string;
+  onClick?: () => void;
+  title?: string;
+}) {
+  const isClickable = !!onClick;
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (!onClick) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <div
+      className={isClickable ? 'pl-metric-card-clickable' : undefined}
+      onClick={onClick}
+      onKeyDown={isClickable ? handleKeyDown : undefined}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      title={title}
       style={{
         padding: '8px',
         borderRadius: '6px',
