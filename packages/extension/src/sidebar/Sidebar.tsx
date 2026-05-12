@@ -21,7 +21,7 @@ import { useModeColors } from './hooks/useModeColors';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useToast } from './hooks/useToast';
 import { ToastContext } from './ToastContext';
-import { api } from '../utils/api';
+import { api, signOutAndReauth } from '../utils/api';
 
 interface SidebarProps {
   gmailAdapter: GmailAdapter;
@@ -31,7 +31,7 @@ type SidebarTab = 'pipeline' | 'templates' | 'nudges' | 'history' | 'discover';
 
 export function Sidebar({ gmailAdapter }: SidebarProps) {
   const { resolvedTheme, setTheme } = useTheme();
-  const [activeMode, setActiveMode] = useState<TransactionMode>('buy');
+  const [activeMode, setActiveMode] = useState<TransactionMode>('sell');
   const [activeTab, setActiveTab] = useState<SidebarTab>('pipeline');
   const [currentThread, setCurrentThread] = useState<ThreadViewData | null>(null);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
@@ -42,6 +42,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [settingsTab, setSettingsTab] = useState<'auto-reply' | 'my-emails' | 'source-registry'>('auto-reply');
   const [userEmailsVersion, setUserEmailsVersion] = useState(0);
   const [replyCount, setReplyCount] = useState(0);
+  const [signingOut, setSigningOut] = useState(false);
   const { toasts, showToast, dismissToast } = useToast();
 
   // Check onboarding status on mount
@@ -355,6 +356,54 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
             {settingsTab === 'auto-reply' && <AutoReplySettingsView />}
             {settingsTab === 'my-emails' && <MyEmailsView onEmailsChanged={() => setUserEmailsVersion((v) => v + 1)} />}
             {settingsTab === 'source-registry' && <SourceRegistryView />}
+
+            {/* Sign out & switch Google account */}
+            <div
+              style={{
+                marginTop: '16px',
+                paddingTop: '12px',
+                borderTop: '1px solid var(--pl-border-secondary)',
+              }}
+            >
+              <div style={{ fontSize: '10px', color: 'var(--pl-text-tertiary)', marginBottom: '6px' }}>
+                Account
+              </div>
+              <button
+                disabled={signingOut}
+                onClick={async () => {
+                  setSigningOut(true);
+                  try {
+                    const result = await signOutAndReauth();
+                    showToast(`Signed in as ${result.email}`, 'success');
+                    setShowSettings(false);
+                    // Force a reload so all views pick up the new identity
+                    setTimeout(() => window.location.reload(), 800);
+                  } catch (err) {
+                    showToast(`Sign-out failed: ${(err as Error).message}`, 'error');
+                  } finally {
+                    setSigningOut(false);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  border: '1px solid var(--pl-border-secondary)',
+                  borderRadius: '4px',
+                  backgroundColor: 'transparent',
+                  color: 'var(--pl-text-secondary)',
+                  cursor: signingOut ? 'wait' : 'pointer',
+                  opacity: signingOut ? 0.6 : 1,
+                }}
+                title="Clear cached Google token and re-pick the account PitchLink uses"
+              >
+                {signingOut ? 'Signing out…' : 'Sign Out & Switch Account'}
+              </button>
+              <div style={{ fontSize: '10px', color: 'var(--pl-text-tertiary)', marginTop: '6px', lineHeight: 1.4 }}>
+                Forces Google's account picker. Use this if PitchLink is connected to the wrong Gmail account.
+              </div>
+            </div>
           </ErrorBoundary>
         ) : showOnboarding && onboardingChecked ? (
           <ErrorBoundary section="onboarding-view">

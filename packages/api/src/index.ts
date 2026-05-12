@@ -24,6 +24,7 @@ import { discoveryRouter } from './routes/discovery';
 import { autoReplyRouter } from './routes/auto-reply';
 import { sequenceExecutorService } from './services/sequence-executor';
 import { autoReplyExecutorService } from './services/auto-reply-executor';
+import { gmailWatchRenewerService } from './services/gmail-watch-renewer';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -116,6 +117,9 @@ app.listen(PORT, () => {
 
   // Start the auto-reply executor (processes auto-reply queue every 60 seconds)
   autoReplyExecutorService.start();
+
+  // Start the Gmail watch renewer (renews expiring watches every 6 hours)
+  gmailWatchRenewerService.start();
 });
 
 export default app;
