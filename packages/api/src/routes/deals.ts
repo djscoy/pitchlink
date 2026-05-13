@@ -83,10 +83,11 @@ dealsRouter.get('/activities', async (req, res: Response) => {
   try {
     const { workspaceId } = getAuth(req);
     const mode = req.query.mode as string | undefined;
+    const type = req.query.type as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
 
-    const result = await dealsService.getGlobalActivities(workspaceId, { mode, limit, offset });
+    const result = await dealsService.getGlobalActivities(workspaceId, { mode, type, limit, offset });
     res.json({ data: result });
   } catch (err) {
     console.error('[Deals] Global activities error:', err);

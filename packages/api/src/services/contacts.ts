@@ -19,23 +19,52 @@ export interface UpdateContactInput {
 }
 
 export const contactsService = {
-  async list(workspaceId: string, options?: { campaignId?: string; search?: string; limit?: number; offset?: number }) {
+  async list(
+    workspaceId: string,
+    options?: {
+      campaignId?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+      enrichedOnly?: boolean;
+      unassignedFromCampaignId?: string;
+    },
+  ) {
+    // When unassignedFromCampaignId is set, exclude contacts that already have a
+    // deal in that campaign. We do this with a pre-query because Supabase's
+    // PostgREST builder doesn't expose NOT EXISTS subqueries cleanly.
+    let excludedIds: string[] = [];
+    if (options?.unassignedFromCampaignId) {
+      const { data: assignedDeals, error: dealsError } = await supabaseAdmin
+        .from('deals')
+        .select('contact_id')
+        .eq('workspace_id', workspaceId)
+        .eq('campaign_id', options.unassignedFromCampaignId);
+      if (dealsError) throw dealsError;
+      excludedIds = (assignedDeals || []).map((d) => d.contact_id);
+    }
+
     let query = supabaseAdmin
       .from('contacts')
       .select('*', { count: 'exact' })
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
 
+    if (options?.enrichedOnly) {
+      query = query.neq('enrichment_status', 'none');
+    }
+
+    if (excludedIds.length > 0) {
+      query = query.not('id', 'in', `(${excludedIds.join(',')})`);
+    }
+
     if (options?.search) {
       query = query.or(`email.ilike.%${options.search}%,name.ilike.%${options.search}%,domain.ilike.%${options.search}%`);
     }
 
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-    if (options?.offset) {
-      query = query.range(options.offset, options.offset + (options?.limit || 50) - 1);
-    }
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
     if (error) throw error;

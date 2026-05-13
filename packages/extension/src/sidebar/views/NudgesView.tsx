@@ -25,10 +25,10 @@ interface QueueItem {
   };
 }
 
-type ViewMode = 'queue' | 'sequences' | 'create';
+type ViewMode = 'active' | 'templates' | 'create';
 
 export function NudgesView({ mode }: NudgesViewProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('queue');
+  const [viewMode, setViewMode] = useState<ViewMode>('active');
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,7 @@ export function NudgesView({ mode }: NudgesViewProps) {
 
   const loadQueue = useCallback(async () => {
     try {
-      const res = await api.sequences.queue({ mode, limit: 50 }) as { data: QueueItem[] | { enrollments?: QueueItem[] } };
+      const res = await api.sequences.queue({ mode }) as { data: QueueItem[] | { enrollments?: QueueItem[] } };
       const queueData = Array.isArray(res.data) ? res.data : (res.data as { enrollments?: QueueItem[] })?.enrollments || [];
       setQueue(queueData);
     } catch (err) {
@@ -108,7 +108,7 @@ export function NudgesView({ mode }: NudgesViewProps) {
     <div>
       {/* Sub-nav */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
-        {(['queue', 'sequences'] as const).map((v) => (
+        {(['active', 'templates'] as const).map((v) => (
           <button
             key={v}
             onClick={() => setViewMode(v)}
@@ -125,13 +125,13 @@ export function NudgesView({ mode }: NudgesViewProps) {
               textTransform: 'capitalize',
             }}
           >
-            {v === 'queue' ? `Queue (${queue.length})` : `Sequences (${sequences.length})`}
+            {v === 'active' ? `Active (${queue.length})` : `Templates (${sequences.length})`}
           </button>
         ))}
       </div>
 
-      {viewMode === 'queue' && <QueueView queue={queue} modeColors={modeColors} onPause={handlePause} onResume={handleResume} onCancel={handleCancel} />}
-      {viewMode === 'sequences' && <SequencesList sequences={sequences} mode={mode} modeColors={modeColors} onCreated={() => loadSequences()} onDeleted={() => loadSequences()} />}
+      {viewMode === 'active' && <QueueView queue={queue} modeColors={modeColors} onPause={handlePause} onResume={handleResume} onCancel={handleCancel} />}
+      {viewMode === 'templates' && <SequencesList sequences={sequences} mode={mode} modeColors={modeColors} onCreated={() => loadSequences()} onDeleted={() => loadSequences()} />}
     </div>
   );
 }
@@ -155,10 +155,10 @@ function QueueView({
     return (
       <div style={{ textAlign: 'center', padding: '24px 12px' }}>
         <div style={{ fontSize: '13px', color: 'var(--pl-text-secondary)' }}>
-          No pending nudges
+          No active enrollments
         </div>
         <div style={{ fontSize: '12px', color: 'var(--pl-text-tertiary)', marginTop: '4px' }}>
-          Enroll deals in sequences from the contact panel.
+          Enroll deals in a sequence from the contact panel, or create a template in the Templates tab.
         </div>
       </div>
     );

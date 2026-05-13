@@ -243,16 +243,23 @@ export const sequencesService = {
    * List all active/paused enrollments across workspace (Nudge Queue).
    */
   async listQueue(workspaceId: string, options?: { mode?: string; limit?: number }) {
+    // Use an inner join on sequences so we can filter by sequence.mode at the SQL
+    // layer. Without this, mode filtering happened post-fetch and the rendered count
+    // diverged from the dashboard's active_enrollments tile when a mode was selected.
     let query = supabaseAdmin
       .from('sequence_enrollments')
       .select(`
         *,
-        sequence:sequences(id, name, mode, steps_json),
+        sequence:sequences!inner(id, name, mode, steps_json),
         deal:deals(id, contact:contacts(id, email, name, domain), campaign:campaigns(id, name))
       `)
       .eq('workspace_id', workspaceId)
       .in('status', ['active', 'paused'])
       .order('next_fire_at', { ascending: true, nullsFirst: false });
+
+    if (options?.mode) {
+      query = query.eq('sequence.mode', options.mode);
+    }
 
     if (options?.limit) {
       query = query.limit(options.limit);
@@ -260,15 +267,6 @@ export const sequencesService = {
 
     const { data, error } = await query;
     if (error) throw error;
-
-    // Filter by mode if requested (via the sequence's mode)
-    if (options?.mode && data) {
-      return data.filter((e: Record<string, unknown>) => {
-        const seq = e.sequence as { mode: string } | null;
-        return seq?.mode === options.mode;
-      });
-    }
-
     return data || [];
   },
 

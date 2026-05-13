@@ -115,12 +115,14 @@ export const campaignsService = {
     if (mode) dealsQuery = dealsQuery.eq('mode', mode);
     const { count: totalDeals } = await dealsQuery;
 
-    // Replies (email_received activities) in last 30 days
+    // Replies (email_received activities) in last 30 days, scoped to this workspace
+    // via an inner join on deals.workspace_id (deal_activities has no workspace_id column).
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { count: recentReplies } = await supabaseAdmin
       .from('deal_activities')
-      .select('id', { count: 'exact', head: true })
+      .select('id, deal:deals!inner(workspace_id)', { count: 'exact', head: true })
       .eq('type', 'email_received')
+      .eq('deal.workspace_id', workspaceId)
       .gte('created_at', thirtyDaysAgo);
 
     // Active sequence enrollments

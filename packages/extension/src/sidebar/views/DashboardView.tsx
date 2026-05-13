@@ -10,8 +10,11 @@ import { useToastContext } from '../ToastContext';
 interface DashboardViewProps {
   mode: TransactionMode;
   onNavigateToCampaign: (campaignId: string) => void;
-  onNavigateToTab: (tab: 'pipeline' | 'history' | 'nudges') => void;
-  onBulkAssign?: () => void;
+  onNavigateToTab: (
+    tab: 'pipeline' | 'history' | 'nudges',
+    opts?: { historyFilter?: string },
+  ) => void;
+  onShowBulkAssign?: (filter?: 'unassigned' | 'all' | 'enriched') => void;
 }
 
 interface CampaignListItem {
@@ -33,7 +36,7 @@ interface DashboardStats {
   enriched_contacts: number;
 }
 
-export function DashboardView({ mode, onNavigateToCampaign, onNavigateToTab, onBulkAssign }: DashboardViewProps) {
+export function DashboardView({ mode, onNavigateToCampaign, onNavigateToTab, onShowBulkAssign }: DashboardViewProps) {
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -105,9 +108,9 @@ export function DashboardView({ mode, onNavigateToCampaign, onNavigateToTab, onB
           {modeConfig.emoji} {modeConfig.label} Campaigns
         </div>
         <div style={{ display: 'flex', gap: '4px' }}>
-          {onBulkAssign && (
+          {onShowBulkAssign && (
             <button
-              onClick={onBulkAssign}
+              onClick={() => onShowBulkAssign('unassigned')}
               style={{
                 padding: '4px 10px',
                 fontSize: '11px',
@@ -152,8 +155,8 @@ export function DashboardView({ mode, onNavigateToCampaign, onNavigateToTab, onB
             label="Contacts"
             value={stats.total_contacts}
             color="var(--pl-text-primary)"
-            onClick={() => { window.location.hash = '#all'; }}
-            title="Open Gmail All Mail"
+            onClick={onShowBulkAssign ? () => onShowBulkAssign('all') : undefined}
+            title="Browse all contacts"
           />
           <MetricCard
             label="Deals"
@@ -167,7 +170,7 @@ export function DashboardView({ mode, onNavigateToCampaign, onNavigateToTab, onB
             value={stats.recent_replies}
             subtitle="30d"
             color="var(--pl-success)"
-            onClick={() => onNavigateToTab('history')}
+            onClick={() => onNavigateToTab('history', { historyFilter: 'email_received' })}
             title="View recent replies in History"
           />
           <MetricCard
@@ -175,14 +178,14 @@ export function DashboardView({ mode, onNavigateToCampaign, onNavigateToTab, onB
             value={stats.active_enrollments}
             color="var(--pl-text-secondary)"
             onClick={() => onNavigateToTab('nudges')}
-            title="View active sequences in Nudges"
+            title="View active enrollments in Nudges"
           />
           <MetricCard
             label="Enriched"
             value={stats.enriched_contacts}
             color="var(--pl-text-secondary)"
-            onClick={() => onNavigateToTab('history')}
-            title="View enrichment activity in History"
+            onClick={onShowBulkAssign ? () => onShowBulkAssign('enriched') : undefined}
+            title="Browse enriched contacts"
           />
           <MetricCard
             label="Campaigns"
