@@ -234,7 +234,7 @@ export const dealsService = {
 
   async getGlobalActivities(
     workspaceId: string,
-    params: { mode?: string; limit?: number; offset?: number },
+    params: { mode?: string; type?: string; limit?: number; offset?: number },
   ) {
     const limit = params.limit || 50;
     const offset = params.offset || 0;
@@ -258,6 +258,9 @@ export const dealsService = {
 
     if (params.mode) {
       query = query.eq('deal.mode', params.mode);
+    }
+    if (params.type) {
+      query = query.eq('type', params.type);
     }
 
     const { data, error, count }: { data: any[]; error: any; count: number | null } = await query;

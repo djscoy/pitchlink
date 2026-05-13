@@ -7,6 +7,8 @@ import { useToastContext } from '../ToastContext';
 
 interface HistoryViewProps {
   mode: TransactionMode;
+  initialFilter?: string;
+  onClearFilter?: () => void;
 }
 
 interface ActivityItem {
@@ -40,18 +42,25 @@ const ACTIVITY_CONFIG: Record<string, { icon: string; label: string }> = {
   deal_created: { icon: '\u{1F4C4}', label: 'Deal created' },
 };
 
-export function HistoryView({ mode }: HistoryViewProps) {
+export function HistoryView({ mode, initialFilter, onClearFilter }: HistoryViewProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<string | undefined>(initialFilter);
   const modeColors = useModeColors(mode);
   const showToast = useToastContext();
+
+  // Re-sync when a new filter is pushed in from a dashboard tile click.
+  useEffect(() => {
+    setActiveFilter(initialFilter);
+  }, [initialFilter]);
 
   const loadActivities = useCallback(async (offset = 0, append = false): Promise<boolean> => {
     try {
       const result = await api.deals.getGlobalActivities({
         mode,
+        type: activeFilter,
         limit: PAGE_SIZE,
         offset,
       }) as { data: { activities: ActivityItem[]; total: number } };
@@ -67,12 +76,51 @@ export function HistoryView({ mode }: HistoryViewProps) {
       console.error('[HistoryView] Failed to load activities:', err);
       return false;
     }
-  }, [mode]);
+  }, [mode, activeFilter]);
 
   useEffect(() => {
     setLoading(true);
     loadActivities(0).finally(() => setLoading(false));
   }, [loadActivities]);
+
+  const clearFilter = () => {
+    setActiveFilter(undefined);
+    onClearFilter?.();
+  };
+
+  const filterChip = activeFilter ? (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '4px 8px',
+        marginBottom: '8px',
+        fontSize: '11px',
+        borderRadius: '12px',
+        backgroundColor: 'var(--pl-bg-tertiary)',
+        color: 'var(--pl-text-secondary)',
+      }}
+    >
+      <span>Filtered: {ACTIVITY_CONFIG[activeFilter]?.label || activeFilter}</span>
+      <button
+        type="button"
+        onClick={clearFilter}
+        aria-label="Clear filter"
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--pl-text-tertiary)',
+          fontSize: '12px',
+          padding: '0 2px',
+          lineHeight: 1,
+        }}
+      >
+        &#10005;
+      </button>
+    </div>
+  ) : null;
 
   const handleLoadMore = async () => {
     setLoadingMore(true);
@@ -97,13 +145,18 @@ export function HistoryView({ mode }: HistoryViewProps) {
 
   if (activities.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '24px 12px' }}>
-        <div style={{ fontSize: '24px', marginBottom: '8px' }}>&#128337;</div>
-        <div style={{ fontSize: '13px', color: 'var(--pl-text-secondary)' }}>
-          No activity yet
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--pl-text-tertiary)', marginTop: '4px' }}>
-          Stage changes, emails, and interactions will appear here.
+      <div>
+        {filterChip}
+        <div style={{ textAlign: 'center', padding: '24px 12px' }}>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>&#128337;</div>
+          <div style={{ fontSize: '13px', color: 'var(--pl-text-secondary)' }}>
+            {activeFilter ? 'No matching activity' : 'No activity yet'}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--pl-text-tertiary)', marginTop: '4px' }}>
+            {activeFilter
+              ? 'Try clearing the filter above to see all activity.'
+              : 'Stage changes, emails, and interactions will appear here.'}
+          </div>
         </div>
       </div>
     );
@@ -111,6 +164,7 @@ export function HistoryView({ mode }: HistoryViewProps) {
 
   return (
     <div>
+      {filterChip}
       <div style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)', marginBottom: '8px' }}>
         {total} activit{total === 1 ? 'y' : 'ies'}
       </div>

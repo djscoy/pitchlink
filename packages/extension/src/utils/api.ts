@@ -76,11 +76,19 @@ export async function signOutAndReauth(): Promise<{ email: string }> {
 export const api = {
   // Contacts
   contacts: {
-    list: (params?: { search?: string; limit?: number; offset?: number }) => {
+    list: (params?: {
+      search?: string;
+      limit?: number;
+      offset?: number;
+      enrichedOnly?: boolean;
+      unassignedFromCampaignId?: string;
+    }) => {
       const query = new URLSearchParams();
       if (params?.search) query.set('search', params.search);
       if (params?.limit) query.set('limit', String(params.limit));
       if (params?.offset) query.set('offset', String(params.offset));
+      if (params?.enrichedOnly) query.set('enriched_only', 'true');
+      if (params?.unassignedFromCampaignId) query.set('unassigned_from', params.unassignedFromCampaignId);
       const qs = query.toString();
       return apiRequest<ApiResult<unknown>>('GET', `/contacts${qs ? `?${qs}` : ''}`);
     },
@@ -154,9 +162,10 @@ export const api = {
       apiRequest<ApiResult<unknown>>('PATCH', `/deals/${id}/stage`, { stage }),
     getActivities: (id: string) =>
       apiRequest<ApiResult<unknown>>('GET', `/deals/${id}/activities`),
-    getGlobalActivities: (params: { mode?: string; limit?: number; offset?: number }) => {
+    getGlobalActivities: (params: { mode?: string; type?: string; limit?: number; offset?: number }) => {
       const qs = new URLSearchParams();
       if (params.mode) qs.set('mode', params.mode);
+      if (params.type) qs.set('type', params.type);
       if (params.limit) qs.set('limit', String(params.limit));
       if (params.offset) qs.set('offset', String(params.offset));
       const q = qs.toString();

@@ -5,10 +5,19 @@ import { useModeColors } from '../hooks/useModeColors';
 import { api } from '../../utils/api';
 import { ContactCardSkeleton } from '../components/Skeleton';
 
+type ContactFilter = 'unassigned' | 'all' | 'enriched';
+
 interface BulkAssignViewProps {
   mode: TransactionMode;
+  initialFilter?: ContactFilter;
   onClose: () => void;
 }
+
+const FILTER_LABELS: Record<ContactFilter, string> = {
+  unassigned: 'Unassigned',
+  all: 'All',
+  enriched: 'Enriched',
+};
 
 interface CampaignOption {
   id: string;
@@ -19,13 +28,14 @@ interface CampaignOption {
 
 const PAGE_SIZE = 50;
 
-export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
+export function BulkAssignView({ mode, initialFilter = 'unassigned', onClose }: BulkAssignViewProps) {
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [totalUnassigned, setTotalUnassigned] = useState(0);
+  const [totalContacts, setTotalContacts] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<ContactFilter>(initialFilter);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [assigning, setAssigning] = useState(false);
@@ -51,9 +61,11 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
     })();
   }, [mode]);
 
-  // Load unassigned contacts when campaign or search changes
+  // Load contacts according to the active filter. 'unassigned' requires a campaign;
+  // 'all' and 'enriched' load workspace-wide and the assign action stays gated on
+  // the campaign picker.
   const loadContacts = useCallback(async (append = false) => {
-    if (!selectedCampaignId) return;
+    if (filter === 'unassigned' && !selectedCampaignId) return;
 
     if (append) {
       setLoadingMore(true);
@@ -65,10 +77,12 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
 
     try {
       const offset = append ? contacts.length : 0;
-      const res = await api.contacts.listUnassigned(selectedCampaignId, {
+      const res = await api.contacts.list({
         search: search || undefined,
         limit: PAGE_SIZE,
         offset,
+        enrichedOnly: filter === 'enriched',
+        unassignedFromCampaignId: filter === 'unassigned' ? selectedCampaignId : undefined,
       }) as { data: { contacts: Contact[]; total: number } };
 
       if (append) {
@@ -76,21 +90,19 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
       } else {
         setContacts(res.data.contacts);
       }
-      setTotalUnassigned(res.data.total);
+      setTotalContacts(res.data.total);
     } catch (err) {
       console.error('[BulkAssign] Failed to load contacts:', err);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [selectedCampaignId, search, contacts.length]);
+  }, [selectedCampaignId, search, contacts.length, filter]);
 
-  // Reload contacts when campaign or search changes
+  // Reload contacts when campaign, search, or filter changes
   useEffect(() => {
-    if (selectedCampaignId) {
-      loadContacts(false);
-    }
-  }, [selectedCampaignId, search]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadContacts(false);
+  }, [selectedCampaignId, search, filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch pipeline preset when campaign changes
   useEffect(() => {
@@ -155,7 +167,7 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
     }
   };
 
-  const hasMore = contacts.length < totalUnassigned;
+  const hasMore = contacts.length < totalContacts;
   const selectedCampaign = campaigns.find((c) => c.id === selectedCampaignId);
 
   return (
@@ -175,7 +187,38 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
         >
           &#8592;
         </button>
-        <div style={{ fontSize: '14px', fontWeight: 600 }}>Bulk Assign to Campaign</div>
+        <div style={{ fontSize: '14px', fontWeight: 600 }}>
+          {filter === 'unassigned' ? 'Bulk Assign to Campaign' : `${FILTER_LABELS[filter]} Contacts`}
+        </div>
+      </div>
+
+      {/* Filter toggle */}
+      <div
+        role="tablist"
+        aria-label="Contact filter"
+        style={{ display: 'flex', gap: '2px', marginBottom: '8px' }}
+      >
+        {(['unassigned', 'all', 'enriched'] as const).map((f) => (
+          <button
+            key={f}
+            role="tab"
+            aria-selected={filter === f}
+            onClick={() => setFilter(f)}
+            style={{
+              flex: 1,
+              padding: '5px 6px',
+              fontSize: '11px',
+              fontWeight: filter === f ? 600 : 400,
+              border: filter === f ? `1px solid ${modeColors.color}` : '1px solid var(--pl-border-secondary)',
+              borderRadius: '6px',
+              backgroundColor: filter === f ? modeColors.color : 'transparent',
+              color: filter === f ? 'var(--pl-text-inverse)' : 'var(--pl-text-secondary)',
+              cursor: 'pointer',
+            }}
+          >
+            {FILTER_LABELS[f]}
+          </button>
+        ))}
       </div>
 
       {/* Campaign Selector */}
@@ -264,13 +307,13 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
             />
             <span style={{ color: 'var(--pl-text-secondary)' }}>
               {selectedIds.size > 0
-                ? `${selectedIds.size} of ${totalUnassigned} selected`
+                ? `${selectedIds.size} of ${totalContacts} selected`
                 : `Select all (${contacts.length} loaded)`
               }
             </span>
           </label>
           <span style={{ fontSize: '11px', color: 'var(--pl-text-tertiary)' }}>
-            {totalUnassigned} unassigned
+            {totalContacts} {FILTER_LABELS[filter].toLowerCase()}
           </span>
         </div>
       )}
@@ -292,9 +335,13 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
             color: 'var(--pl-text-tertiary)',
             fontSize: '12px',
           }}>
-            {selectedCampaignId
-              ? 'All contacts are already assigned to this campaign.'
-              : 'Select a campaign to see unassigned contacts.'}
+            {filter === 'unassigned' && !selectedCampaignId
+              ? 'Select a campaign to see unassigned contacts.'
+              : filter === 'unassigned'
+                ? 'All contacts are already assigned to this campaign.'
+                : filter === 'enriched'
+                  ? 'No enriched contacts yet. Open a contact and run enrichment to get started.'
+                  : 'No contacts in this workspace yet.'}
           </div>
         ) : (
           <>
@@ -370,7 +417,7 @@ export function BulkAssignView({ mode, onClose }: BulkAssignViewProps) {
                   marginTop: '8px',
                 }}
               >
-                {loadingMore ? 'Loading...' : `Load more (${totalUnassigned - contacts.length} remaining)`}
+                {loadingMore ? 'Loading…' : `Load more (${totalContacts - contacts.length} remaining)`}
               </button>
             )}
           </>

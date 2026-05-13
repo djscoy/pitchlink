@@ -38,6 +38,8 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [bulkAssignFilter, setBulkAssignFilter] = useState<'unassigned' | 'all' | 'enriched'>('unassigned');
+  const [historyFilter, setHistoryFilter] = useState<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'auto-reply' | 'my-emails' | 'source-registry'>('auto-reply');
   const [userEmailsVersion, setUserEmailsVersion] = useState(0);
@@ -151,6 +153,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
             setShowSettings(false);
             setShowBulkAssign(false);
             setShowOnboarding(false);
+            setHistoryFilter(undefined);
           }}
           title="Go to dashboard"
           aria-label={`${APP_CONFIG.APP_NAME} — go to dashboard`}
@@ -280,7 +283,12 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           {TABS.map((tab, idx) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                // Direct tab clicks reset any deep-link filters; the dashboard
+                // tiles set them again when needed.
+                setHistoryFilter(undefined);
+              }}
               style={{
                 flex: 1,
                 padding: '8px 0',
@@ -421,6 +429,7 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
           <ErrorBoundary section="bulk-assign-view">
             <BulkAssignView
               mode={activeMode}
+              initialFilter={bulkAssignFilter}
               onClose={() => setShowBulkAssign(false)}
             />
           </ErrorBoundary>
@@ -444,8 +453,14 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
                     onNavigateToCampaign={(id) => {
                       setActiveCampaignId(id);
                     }}
-                    onNavigateToTab={(tab) => setActiveTab(tab)}
-                    onBulkAssign={() => setShowBulkAssign(true)}
+                    onNavigateToTab={(tab, opts) => {
+                      setActiveTab(tab);
+                      setHistoryFilter(opts?.historyFilter);
+                    }}
+                    onShowBulkAssign={(filter) => {
+                      setBulkAssignFilter(filter ?? 'unassigned');
+                      setShowBulkAssign(true);
+                    }}
                   />
                 )}
               </ErrorBoundary>
@@ -462,7 +477,11 @@ export function Sidebar({ gmailAdapter }: SidebarProps) {
             )}
             {activeTab === 'history' && (
               <ErrorBoundary section="history-view">
-                <HistoryView mode={activeMode} />
+                <HistoryView
+                  mode={activeMode}
+                  initialFilter={historyFilter}
+                  onClearFilter={() => setHistoryFilter(undefined)}
+                />
               </ErrorBoundary>
             )}
             {activeTab === 'discover' && (

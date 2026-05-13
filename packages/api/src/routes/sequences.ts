@@ -54,7 +54,7 @@ sequencesRouter.get('/queue', async (req, res: Response) => {
     const { mode, limit } = req.query;
     const data = await sequencesService.listQueue(workspaceId, {
       mode: mode as string,
-      limit: limit ? parseInt(limit as string) : 50,
+      limit: limit ? parseInt(limit as string) : undefined,
     });
     res.json({ data });
   } catch (err) {

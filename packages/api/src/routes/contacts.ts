@@ -16,12 +16,14 @@ contactsRouter.use(requireAuth);
 contactsRouter.get('/', async (req, res: Response) => {
   try {
     const { workspaceId } = getAuth(req);
-    const { search, limit, offset } = req.query;
+    const { search, limit, offset, enriched_only, unassigned_from } = req.query;
 
     const result = await contactsService.list(workspaceId, {
       search: search as string,
       limit: limit ? parseInt(limit as string) : 50,
       offset: offset ? parseInt(offset as string) : 0,
+      enrichedOnly: enriched_only === 'true' || enriched_only === '1',
+      unassignedFromCampaignId: unassigned_from as string | undefined,
     });
 
     res.json({ data: result });
