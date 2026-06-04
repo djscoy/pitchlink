@@ -123,6 +123,15 @@ export const autoReplyService = {
           );
           classification = result.type;
 
+          if (result.errored) {
+            // Classifier is down (e.g. ANTHROPIC_API_KEY missing/invalid). Record a
+            // DISTINCT skip_reason so the outage is visible and countable, instead of
+            // masquerading as "not_inquiry" and silently dropping revenue for weeks.
+            console.error('[AutoReply] Classifier errored — skipping as classifier_error (NOT not_inquiry):', messageData.senderEmail);
+            await this.logSkipped(workspaceId, rule.id, messageData, 'classifier_error');
+            continue;
+          }
+
           if (!inquiryClassifierService.isInquiry(result.type)) {
             // Not an inquiry — skip
             await this.logSkipped(workspaceId, rule.id, messageData, `not_inquiry (${result.type}, ${result.confidence})`);

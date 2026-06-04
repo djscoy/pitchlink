@@ -26,6 +26,12 @@ export type InquiryType =
 interface ClassificationResult {
   type: InquiryType;
   confidence: number;
+  /**
+   * True when the Claude call itself failed (auth, billing, model, network).
+   * Distinguishes a real "not an inquiry" verdict from a broken classifier so
+   * an outage is visible instead of silently bucketing every email as spam.
+   */
+  errored?: boolean;
 }
 
 export const inquiryClassifierService = {
@@ -69,8 +75,11 @@ Return ONLY valid JSON:
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
       };
     } catch (err) {
-      console.error('[InquiryClassifier] Classification failed:', err);
-      return { type: 'not_inquiry', confidence: 0 };
+      // Fail LOUD. A thrown classifier (missing ANTHROPIC_API_KEY, billing,
+      // model rejection) must not look like a genuine "not an inquiry" verdict,
+      // or revenue inquiries get silently skipped for weeks (the Apr-May 2026 outage).
+      console.error('[InquiryClassifier] CLASSIFIER ERROR — emails will NOT be auto-drafted until fixed:', err);
+      return { type: 'not_inquiry', confidence: 0, errored: true };
     }
   },
 
