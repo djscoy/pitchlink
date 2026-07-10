@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Deploy note 2026-07-10: Railway only rebuilds on watched-path changes, so a
+// railway.json-only commit (the build fix, 3cdfc91) was SKIPPED. This comment exists
+// to touch packages/api and trigger the build that picks that fix up.
 // Load .env from monorepo root (handles npm workspace cwd differences)
 dotenv.config({ path: path.resolve(__dirname, '../../../.env'), override: true });
 import express from 'express';
