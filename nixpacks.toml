@@ -1,0 +1,5 @@
+# Build environment for the Railway service (@pitchlink/api).
+# Node 20: @supabase/supabase-js >= 2.101 requires node >= 20; the builder's default
+# node 18 has failed every build since 2026-05-13 (EBADENGINE warnings, then breakage).
+[variables]
+NIXPACKS_NODE_VERSION = "20"
