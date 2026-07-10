@@ -6,6 +6,10 @@ export interface CreateDealInput {
   campaign_id: string;
   mode: 'buy' | 'sell' | 'exchange';
   initial_stage: string;
+  /** Free-form provenance (e.g. gmail_thread_id) — the dashboard sync keys its
+   *  cross-run idempotency on metadata.gmail_thread_id, so writers that know the
+   *  thread should record it (deal-logic review 2026-07-10). */
+  metadata?: Record<string, unknown>;
 }
 
 export const dealsService = {
@@ -77,7 +81,7 @@ export const dealsService = {
         campaign_id: input.campaign_id,
         mode: input.mode,
         current_stage: input.initial_stage,
-        metadata: {},
+        metadata: input.metadata ?? {},
       })
       .select(`
         *,
@@ -103,10 +107,10 @@ export const dealsService = {
   },
 
   async changeStage(workspaceId: string, dealId: string, newStage: string) {
-    // Get current deal
+    // Get current deal + its campaign's pipeline preset (stage vocabulary)
     const { data: current, error: fetchError } = await supabaseAdmin
       .from('deals')
-      .select('current_stage')
+      .select('current_stage, campaign:campaigns(pipeline_preset:pipeline_presets(stages_json))')
       .eq('workspace_id', workspaceId)
       .eq('id', dealId)
       .single();
@@ -115,6 +119,19 @@ export const dealsService = {
 
     const oldStage = current.current_stage;
     if (oldStage === newStage) return current;
+
+    // A stage must exist in the campaign's preset: any-string stages silently fell
+    // off every board view (deal-logic review 2026-07-10). Presets without stages_json
+    // (legacy) skip the check rather than block.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stages = (current as any)?.campaign?.pipeline_preset?.stages_json as
+      | { id: string }[]
+      | undefined;
+    if (stages?.length && !stages.some((s) => s.id === newStage)) {
+      throw new Error(
+        `Invalid stage '${newStage}' for this campaign's pipeline (valid: ${stages.map((s) => s.id).join(', ')})`,
+      );
+    }
 
     // Update stage
     const { data, error } = await supabaseAdmin
@@ -140,6 +157,21 @@ export const dealsService = {
   },
 
   async logActivity(dealId: string, type: DealActivityType, data: Record<string, unknown>) {
+    // Gmail history replays deliver the same message 2-3x (18 duplicate activity groups
+    // found live, deal-logic review 2026-07-10): a message-scoped activity is written
+    // once per (deal, type, gmail_message_id), never again.
+    if (data?.gmail_message_id) {
+      const { data: dup } = await supabaseAdmin
+        .from('deal_activities')
+        .select('id')
+        .eq('deal_id', dealId)
+        .eq('type', type)
+        .eq('data->>gmail_message_id', String(data.gmail_message_id))
+        .limit(1)
+        .maybeSingle();
+      if (dup) return;
+    }
+
     const { error } = await supabaseAdmin.from('deal_activities').insert({
       deal_id: dealId,
       type,

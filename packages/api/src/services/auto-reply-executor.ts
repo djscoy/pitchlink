@@ -11,6 +11,7 @@
 import { supabaseAdmin } from '../db/supabase';
 import { aiComposeService } from './ai-compose';
 import { gmailWatchService } from './gmail-watch';
+import { dealsService } from './deals';
 
 const EXECUTOR_INTERVAL_MS = 60_000; // 1 minute
 
@@ -111,7 +112,18 @@ export const autoReplyExecutorService = {
       const accessToken = watchState.access_token_encrypted;
       const typedRule = rule as AutoReplyRule;
 
-      if (typedRule.mode === 'auto_send') {
+      // Unattended sending is a deliberate, env-gated capability: without
+      // AUTO_REPLY_AUTO_SEND=true on the service, an auto_send rule degrades to
+      // draft_hold instead of emailing strangers with no human click (deal-logic
+      // review 2026-07-10: one rule PATCH away from unattended sends).
+      const autoSendArmed = process.env.AUTO_REPLY_AUTO_SEND === 'true';
+      if (typedRule.mode === 'auto_send' && !autoSendArmed) {
+        console.warn(
+          '[AutoReplyExecutor] auto_send rule active but AUTO_REPLY_AUTO_SEND is not set; drafting instead',
+        );
+      }
+
+      if (typedRule.mode === 'auto_send' && autoSendArmed) {
         // Send directly
         const messageId = await aiComposeService.sendEmail(
           accessToken,
@@ -216,16 +228,30 @@ export const autoReplyExecutorService = {
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const stages = (campaign as any)?.pipeline_preset?.stages_json as { id: string }[] | undefined;
-          // Use second stage (Quote Sent) since we're replying with pricing
-          const stage = stages?.[1]?.id || stages?.[0]?.id || 'inquiry_in';
+          // FIRST stage: at this point only an unsent Gmail draft exists, so claiming
+          // 'quote-sent' lied to the board, and the old 'inquiry_in' fallback
+          // (underscore) matched no live preset (deal-logic review 2026-07-10).
+          const stage = stages?.[0]?.id || 'inquiry-in';
 
-          await supabaseAdmin.from('deals').insert({
-            workspace_id: item.workspace_id,
-            contact_id: contactId,
-            campaign_id: rule.campaign_id,
-            current_stage: stage,
-            mode: 'sell',
-          });
+          // Through dealsService so the deal gets its stage_changed birth activity,
+          // and with the thread id so the dashboard sync can thread-match it.
+          try {
+            await dealsService.create(item.workspace_id, {
+              contact_id: contactId,
+              campaign_id: rule.campaign_id,
+              mode: 'sell',
+              initial_stage: stage,
+              metadata: {
+                source: 'auto-reply',
+                ...(item.gmail_thread_id ? { gmail_thread_id: item.gmail_thread_id } : {}),
+              },
+            });
+          } catch (dealErr) {
+            // duplicate (contact already in campaign) is fine — anything else logs
+            if (!(dealErr instanceof Error) || !dealErr.message.includes('already in this campaign')) {
+              console.error('[AutoReplyExecutor] Deal create failed:', dealErr);
+            }
+          }
         }
       }
     } catch (err) {

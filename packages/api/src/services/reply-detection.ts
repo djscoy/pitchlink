@@ -15,12 +15,30 @@ import type { IIEResult } from '@pitchlink/shared';
  * Integrates with IIE (forward detection) — checks for forwards before reply detection.
  * When a reply is detected, optionally auto-advances the deal's pipeline stage.
  */
+// Mailboxes currently mid-processing: Pub/Sub redelivers and bursts overlap, and two
+// concurrent runs over the same history window double-process every message
+// (deal-logic review 2026-07-10: 18 duplicate activity groups live).
+const processingMailboxes = new Set<string>();
+
 export const replyDetectionService = {
   /**
    * Process a Gmail Pub/Sub notification.
    * Called from the webhook endpoint.
    */
   async processNotification(emailAddress: string, historyId: string): Promise<void> {
+    if (processingMailboxes.has(emailAddress)) {
+      console.log(`[ReplyDetection] ${emailAddress} already processing; skipping overlap`);
+      return;
+    }
+    processingMailboxes.add(emailAddress);
+    try {
+      await this.processNotificationLocked(emailAddress, historyId);
+    } finally {
+      processingMailboxes.delete(emailAddress);
+    }
+  },
+
+  async processNotificationLocked(emailAddress: string, historyId: string): Promise<void> {
     // 1. Find the user by email
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
@@ -46,8 +64,14 @@ export const replyDetectionService = {
     // 3. Fetch Gmail history since last known history ID
     const messages = await this.fetchHistoryChanges(accessToken, lastHistoryId);
 
-    // 4. Update stored history ID
-    await gmailWatchService.updateHistoryId(user.id, historyId);
+    // 4. Advance the stored history cursor - MONOTONICALLY. The webhook payload is
+    // caller-supplied; persisting an older (or forged) id used to rewind the cursor
+    // and replay the window (deal-logic review 2026-07-10).
+    const prev = Number(lastHistoryId) || 0;
+    const next = Number(historyId) || 0;
+    if (next > prev) {
+      await gmailWatchService.updateHistoryId(user.id, historyId);
+    }
 
     if (messages.length === 0) return;
 

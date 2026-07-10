@@ -110,6 +110,19 @@ export const sequenceExecutorService = {
       return;
     }
 
+    // A step overdue by more than 14 days is stale, not late: two enrollments sat in
+    // the 5-minute retry loop for two months and would have fired months-old follow-ups
+    // at real buyers the moment the failure cleared (deal-logic review 2026-07-10).
+    // Pause them for a human to re-arm deliberately.
+    const dueAt = enrollment.next_fire_at ? new Date(enrollment.next_fire_at).getTime() : 0;
+    if (dueAt && Date.now() - dueAt > 14 * 86400 * 1000) {
+      console.warn(
+        `[SequenceExecutor] Enrollment ${enrollment.id} step overdue since ${enrollment.next_fire_at}; pausing instead of firing stale content`,
+      );
+      await sequencesService.pauseEnrollment(enrollment.id, 'stale_step_overdue_14d');
+      return;
+    }
+
     // Get Gmail access token for the workspace owner
     const { data: user } = await supabaseAdmin
       .from('users')
@@ -180,11 +193,19 @@ export const sequenceExecutorService = {
       body,
     );
 
-    if (draftId) {
-      console.log(
-        `[SequenceExecutor] Step ${enrollment.current_step + 1}/${steps.length} fired for ${contact.email} → Gmail Draft ${draftId}`,
+    if (!draftId) {
+      // Draft creation failed: leave the enrollment un-advanced so the touch is
+      // retried (it used to advance anyway, silently eating the follow-up; the
+      // stale-step guard above caps how long retries can run).
+      console.warn(
+        `[SequenceExecutor] Draft creation failed for ${contact.email}, step ${enrollment.current_step + 1}; will retry`,
       );
+      return;
     }
+
+    console.log(
+      `[SequenceExecutor] Step ${enrollment.current_step + 1}/${steps.length} fired for ${contact.email} → Gmail Draft ${draftId}`,
+    );
 
     // Advance to next step (or complete if last step)
     await sequencesService.advanceStep(enrollment.id, steps);

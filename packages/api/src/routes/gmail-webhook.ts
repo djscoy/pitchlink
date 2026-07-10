@@ -15,6 +15,16 @@ export const gmailWebhookRouter = Router();
  */
 gmailWebhookRouter.post('/webhook', async (req: Request, res: Response) => {
   try {
+    // Opt-in shared-secret auth: set GMAIL_WEBHOOK_TOKEN on the service AND append
+    // ?token=<value> to the Pub/Sub push endpoint URL. Unset = open (legacy behavior)
+    // so enabling it is a deliberate two-sided change that cannot break the watcher
+    // by itself. (The endpoint was fully unauthenticated - deal-logic review 2026-07-10.)
+    const requiredToken = process.env.GMAIL_WEBHOOK_TOKEN;
+    if (requiredToken && req.query.token !== requiredToken) {
+      console.warn('[Gmail Webhook] Rejected notification with bad/missing token');
+      return res.status(403).send();
+    }
+
     const message = req.body?.message;
 
     if (!message?.data) {
