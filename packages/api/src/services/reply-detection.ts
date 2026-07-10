@@ -194,7 +194,12 @@ export const replyDetectionService = {
 
   /**
    * Handle an outbound message (sent by the user to a contact).
-   * Auto-advances the deal's pipeline stage to the next stage.
+   * Logs email_sent activity; advances the deal's stage only when the CURRENT stage
+   * opts in via `auto_advance_on_outbound` in the preset's stages_json — mirroring the
+   * inbound path's per-stage `auto_advance_on_reply` gate. It used to advance
+   * unconditionally, so every email sent to a buyer marched their deal one stage
+   * (2026-07-10: a fresh 'agreed' deal was pushed to 'reported' in 21 seconds by a
+   * Gmail history replay of three outbound messages).
    */
   async handleOutboundMessage(
     workspaceId: string,
@@ -240,16 +245,18 @@ export const replyDetectionService = {
         detected_at: new Date().toISOString(),
       });
 
-      // Auto-advance to next stage
+      // Auto-advance only when the current stage explicitly opts in (no preset sets
+      // this flag today, so outbound sends no longer move deals by default)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const preset = (deal as any).campaign?.pipeline_preset;
       if (!preset?.stages_json) continue;
 
-      const stages = preset.stages_json as { id: string }[];
+      const stages = preset.stages_json as { id: string; auto_advance_on_outbound?: boolean }[];
       const currentStageIdx = stages.findIndex((s) => s.id === deal.current_stage);
+      const currentStage = stages[currentStageIdx];
       const nextStage = stages[currentStageIdx + 1];
 
-      if (nextStage) {
+      if (currentStage?.auto_advance_on_outbound && nextStage) {
         await dealsService.changeStage(workspaceId, deal.id, nextStage.id);
         console.log(
           `[ReplyDetection] Outbound auto-advanced deal ${deal.id}: ${deal.current_stage} → ${nextStage.id}`,
